@@ -1,4 +1,9 @@
-data/
-venv/
-mlruns/
-notebooks/
+venv
+__pycache__
+*.pyc
+data/raw
+mlruns
+logs
+artifacts
+.git
+.gitignore

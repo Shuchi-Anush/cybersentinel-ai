@@ -1,0 +1,14 @@
+dataset:
+  name: CICIDS2017
+  raw_path: data/raw/CICIDS2017
+  processed_path: data/processed
+
+split:
+  train_days:
+    - Monday-WorkingHours.pcap_ISCX.csv
+    - Tuesday-WorkingHours.pcap_ISCX.csv
+    - Wednesday-workingHours.pcap_ISCX.csv
+
+  test_days:
+    - Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv
+    - Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv

@@ -1,0 +1,12 @@
+training:
+  test_size: 0.2
+  random_state: 42
+  feature_selection_k: 25
+  pca_components: 12
+
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1

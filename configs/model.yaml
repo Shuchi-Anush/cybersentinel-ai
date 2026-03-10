@@ -1,0 +1,8 @@
+models:
+  decision_tree:
+    criterion: gini
+    max_depth: 10
+    random_state: 42
+
+  naive_bayes:
+    var_smoothing: 1e-9

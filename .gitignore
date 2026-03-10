@@ -4,6 +4,8 @@ __pycache__/
 *.pkl
 *.log
 data/
+data/raw/
+data/processed/
 mlruns/
 outputs/
 .ipynb_checkpoints
