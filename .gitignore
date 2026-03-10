@@ -1,12 +1,53 @@
+# ===============================
+# Python
+# ===============================
 venv/
 __pycache__/
 *.pyc
-*.pkl
-*.log
-data/
-data/raw/
-data/processed/
-mlruns/
-outputs/
-.ipynb_checkpoints
+
+# ===============================
+# Environment
+# ===============================
 .env
+
+# ===============================
+# Models
+# ===============================
+*.pkl
+
+models/*
+!models/.gitkeep
+
+# ===============================
+# Logs
+# ===============================
+*.log
+logs/*
+!logs/.gitkeep
+
+# ===============================
+# Artifacts / outputs
+# ===============================
+artifacts/*
+!artifacts/.gitkeep
+
+outputs/
+
+# ===============================
+# Data
+# ===============================
+data/raw/*
+!data/raw/.gitkeep
+
+data/processed/*
+!data/processed/.gitkeep
+
+# ===============================
+# MLflow
+# ===============================
+mlruns/
+
+# ===============================
+# Jupyter
+# ===============================
+.ipynb_checkpoints/
