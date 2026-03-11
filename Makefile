@@ -7,6 +7,12 @@ train:
 test:
 	pytest tests/
 
+api:
+	uvicorn src.api.api:app --host 0.0.0.0 --port 8000
+
+dashboard:
+	streamlit run src/dashboard/app.py
+
 docker-build:
 	docker build -t cybersentinel .
 

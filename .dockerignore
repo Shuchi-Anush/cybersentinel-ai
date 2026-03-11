@@ -3,7 +3,11 @@ __pycache__
 *.pyc
 data/raw
 mlruns
+outputs
 logs
 artifacts
+notebooks
+tests
+.env
 .git
 .gitignore
