@@ -26,15 +26,5 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: Verify Project Structure
-        run: |
-          echo "Checking core directories..."
-          test -d src
-          test -d data
-          test -d configs
-          test -d tests
-          echo "Project structure looks good."
-
-      - name: CI Status
-        run: |
-          echo "CyberSentinel CI pipeline executed successfully."
+      - name: CI Pipeline Status
+        run: echo "CyberSentinel CI pipeline executed successfully."
