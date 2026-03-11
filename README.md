@@ -1,46 +1,141 @@
-# CyberSentinel AI
+# 🚀 CyberSentinel AI
+
+![CyberSentinel AI](docs/assets/banner.png)
+
+## Machine Learning Powered Intrusion Detection System
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
-![ML](https://img.shields.io/badge/Machine-Learning-orange)
-![Docker](https://img.shields.io/badge/Docker-enabled-blue)
+![Machine Learning](https://img.shields.io/badge/Machine-Learning-orange)
+![MLOps](https://img.shields.io/badge/MLOps-enabled-green)
+![Docker](https://img.shields.io/badge/Docker-ready-blue)
+![CI](https://github.com/Shuchi-Anush/cybersentinel-ai/actions/workflows/ci.yml/badge.svg)
+![Repo Size](https://img.shields.io/github/repo-size/Shuchi-Anush/cybersentinel-ai)
+![Last Commit](https://img.shields.io/github/last-commit/Shuchi-Anush/cybersentinel-ai)
+![Issues](https://img.shields.io/github/issues/Shuchi-Anush/cybersentinel-ai)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Machine Learning Intrusion Detection System using CICIDS2017 dataset.
+CyberSentinel AI is a **Machine Learning-based Intrusion Detection System (IDS)** designed to detect malicious network traffic using the **CIC-IDS2017 dataset**.
 
-CyberSentinel detects malicious network traffic using machine learning models and provides real-time threat analytics.
+The project implements a **complete end-to-end ML pipeline with MLOps practices**, including:
 
----
-
-## Features
-
-• CIC-IDS2017 dataset integration  
-• Production ML pipeline  
-• Feature engineering pipeline  
-• Decision Tree and Naive Bayes models  
-• FastAPI inference service  
-• Streamlit security dashboard  
-• Docker deployment
+- Dataset versioning (DVC)
+- Experiment tracking (MLflow)
+- Automated CI pipelines
+- Containerized deployment
+- FastAPI inference API
+- Streamlit threat analytics dashboard
 
 ---
 
-## Architecture
+## 🧠 System Overview
 
-Data Pipeline → Feature Engineering → Model Training → Evaluation → API → Dashboard
+Modern networks generate massive traffic volumes, making manual monitoring impossible.
+
+CyberSentinel AI applies **machine learning models trained on network flow statistics** to automatically detect malicious traffic patterns such as:
+
+- Distributed Denial of Service (DDoS)
+- Botnet traffic
+- Port scanning
+- Brute force attacks
+- Web attacks
+
+Each dataset row represents a **network flow summary**, not raw packets.
 
 ---
 
-## Project Structure
+## 🎬 System Preview
+
+Dashboard demo will be available after the first working release of the
+CyberSentinel AI intrusion detection pipeline.
+
+CyberSentinel AI analyzes network flow statistics and detects malicious traffic patterns using machine learning.
+
+The system provides:
+
+- real-time intrusion predictions via API
+- experiment tracking through MLflow
+- security analytics dashboard
+
+Example workflow:
+
+1️⃣ Dataset ingestion from CIC-IDS2017  
+2️⃣ Data preprocessing and feature engineering  
+3️⃣ Machine learning model training  
+4️⃣ API inference service  
+5️⃣ Security analytics dashboard visualization
+
+---
+
+## ⚙️ Key Features
+
+- CIC-IDS2017 cybersecurity dataset integration
+- Data ingestion pipeline
+- Data cleaning and preprocessing
+- Feature engineering
+- Dimensionality reduction (PCA)
+- Decision Tree classifier
+- Naive Bayes classifier
+- MLflow experiment tracking
+- DVC dataset versioning
+- FastAPI prediction API
+- Streamlit security dashboard
+- Docker containerization
+- GitHub Actions CI pipeline
+
+---
+
+## 🏗 System Architecture
+
+![Pipeline](docs/assets/pipeline.png)
 
 ```text
-cybersentinel-ai
-│
-├── configs
-├── data
-├── docs
-├── notebooks
-├── scripts
-├── src
-├── tests
+CIC-IDS2017 Dataset
+↓
+Data Ingestion
+↓
+Data Cleaning
+↓
+Feature Engineering
+↓
+Dimensionality Reduction
+↓
+Machine Learning Models
+↓
+FastAPI Inference Service
+↓
+Security Analytics Dashboard
+```
+
+---
+
+## 🧰 Technology Stack
+
+| Layer                 | Technology        |
+| --------------------- | ----------------- |
+| Programming           | Python 3.10       |
+| Data Processing       | Pandas, NumPy     |
+| Machine Learning      | Scikit-learn      |
+| Experiment Tracking   | MLflow            |
+| Dataset Versioning    | DVC               |
+| Backend API           | FastAPI           |
+| Visualization         | Streamlit         |
+| Containerization      | Docker            |
+| CI/CD                 | GitHub Actions    |
+
+---
+
+## 📂 Project Structure
+
+```text
+cybersentinel-ai/
+
+├── configs/
+├── data/
+├── docs/
+├── notebooks/
+├── scripts/
+├── src/
+├── tests/
 ├── Dockerfile
 ├── Makefile
 └── requirements.txt
@@ -48,35 +143,45 @@ cybersentinel-ai
 
 ---
 
-## Dataset
+## 📊 Dataset
 
-This project uses the **CIC-IDS2017 dataset**.
+CyberSentinel AI uses the **CIC-IDS2017 dataset** developed by the Canadian Institute for Cybersecurity.
 
-Download manually from:
+Dataset characteristics:
 
-[CIC-IDS2017 Official Dataset](https://www.unb.ca/cic/datasets/ids-2017.html)
+- ~2.8 million network flows
+- 79 network traffic features
+- Multiple attack categories
+- Realistic enterprise network traffic
 
-Place files inside:
+Download the dataset:
 
-data/raw/CICIDS2017/
+[CIC IDS 2017 Dataset](https://www.unb.ca/cic/datasets/ids-2017.html)
+
+Place the CSV files inside:
+
+`data/raw/CICIDS2017/`
 
 ---
 
-## Setup
+## 🚀 Installation
 
-Clone repository
+Clone the repository:
 
 ```bash
 git clone https://github.com/Shuchi-Anush/cybersentinel-ai.git
+cd cybersentinel-ai
 ```
 
-Install dependencies
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run training
+---
+
+## ▶️ Run ML Pipeline
 
 ```bash
 python src/pipeline/pipeline_runner.py
@@ -84,31 +189,93 @@ python src/pipeline/pipeline_runner.py
 
 ---
 
-## Roadmap
+## 📊 Launch MLflow Tracking
 
-Phase 1
+```bash
+mlflow ui
+```
 
-- Project architecture
-- Repository initialization
+Open in browser:
 
-Phase 2
+<http://127.0.0.1:5000>
 
-- CICIDS2017 dataset loader
-- Preprocessing pipeline
+---
 
-Phase 3
+## 📈 Launch Security Dashboard
 
-- Feature engineering
-- Model training
+```bash
+streamlit run src/dashboard/app.py
+```
 
-Phase 4
+---
 
-- FastAPI inference service
+## 🐳 Docker Deployment
 
-Phase 5
+Build Docker image:
 
-- Security analytics dashboard
+```bash
+docker build -t cybersentinel .
+```
 
-## License
+Run container:
 
-MIT License
+```bash
+docker run -p 8000:8000 cybersentinel
+```
+
+---
+
+## 🔁 Continuous Integration
+
+GitHub Actions automatically runs tests on every push.
+
+Workflow file:
+
+`.github/workflows/ci.yml`
+
+---
+
+## 📍 Project Status
+
+CyberSentinel AI is currently under active development.
+
+Completed components:
+
+- [X] Project architecture  
+- [X] Dataset versioning with DVC  
+- [X] MLflow experiment tracking  
+- [X] CI pipeline  
+- [X] Docker environment  
+
+Upcoming components:
+
+- [ ] Data ingestion module  
+- [ ] Feature engineering pipeline  
+- [ ] Model training workflow  
+- [ ] API inference service  
+- [ ] Streamlit dashboard
+
+---
+
+## 📌 Future Enhancements
+
+- Real-time packet capture using Scapy
+- Deep learning IDS models
+- Cloud deployment
+- Model drift monitoring
+- Distributed ML pipeline
+
+---
+
+## 👨‍💻 Author
+
+Shuchi Anush S
+
+GitHub:  
+<https://github.com/Shuchi-Anush>
+
+---
+
+## 📜 License
+
+This project is licensed under the **MIT License**.
