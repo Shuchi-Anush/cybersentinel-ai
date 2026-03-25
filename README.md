@@ -16,7 +16,7 @@
 
 CyberSentinel AI is a **Machine Learning-based Intrusion Detection System (IDS)** designed to detect malicious network traffic using the **CIC-IDS2017 dataset**.
 
-The project implements a **complete end-to-end ML pipeline with MLOps practices**, including:
+The project implements a **modular MLOps-ready machine learning pipeline for intrusion detection**, including:
 
 - Dataset versioning (DVC)
 - Experiment tracking (MLflow)
@@ -58,29 +58,29 @@ The system provides:
 
 Example workflow:
 
-1️⃣ Dataset ingestion from CIC-IDS2017  
+1️⃣ Feature selection from CIC-IDS2017  
 2️⃣ Data preprocessing and feature engineering  
-3️⃣ Machine learning model training  
-4️⃣ API inference service  
-5️⃣ Security analytics dashboard visualization
+3️⃣ Binary classifier  
+4️⃣ Multi-class classifier  
+5️⃣ Decision mapping
+6️⃣ FastAPI inference API
+7️⃣ Streamlit dashboard visualization
 
 ---
 
-## ⚙️ Key Features
+## ✴️ Key Features
 
 - CIC-IDS2017 cybersecurity dataset integration
-- Data ingestion pipeline
-- Data cleaning and preprocessing
-- Feature engineering
-- Dimensionality reduction (PCA)
-- Decision Tree classifier
-- Naive Bayes classifier
-- MLflow experiment tracking
-- DVC dataset versioning
-- FastAPI prediction API
-- Streamlit security dashboard
+- Feature selection pipeline
+- Data preprocessing and scaling
+- Binary attack detection model
+- Multi-class attack classification model
+- Decision / policy mapping
+- Inference pipeline
+- FastAPI inference API
 - Docker containerization
 - GitHub Actions CI pipeline
+- Model registry / experiment tracking
 
 ---
 
@@ -91,19 +91,21 @@ Example workflow:
 ```text
 CIC-IDS2017 Dataset
 ↓
-Data Ingestion
+Feature Selection
 ↓
-Data Cleaning
+Preprocessing
 ↓
-Feature Engineering
+Binary Classifier (Benign / Attack)
 ↓
-Dimensionality Reduction
+Multi-class Classifier (Attack Type)
 ↓
-Machine Learning Models
+Decision Mapping
 ↓
-FastAPI Inference Service
+Inference Pipeline
 ↓
-Security Analytics Dashboard
+FastAPI API
+↓
+Dashboard / Integration
 ```
 
 ---
@@ -181,11 +183,27 @@ pip install -r requirements.txt
 
 ---
 
-## ▶️ Run ML Pipeline
+## ▶️ Train Binary Model
 
 ```bash
-python src/pipeline/pipeline_runner.py
+python -m src.training.binary_trainer
 ```
+
+## ▶️ Train Multi-class Model
+
+```bash
+python -m src.training.multiclass_trainer
+```
+
+## ▶️ Run API
+
+```bash
+uvicorn src.api.main:app --reload
+```
+
+Open in browser:
+
+<http://127.0.0.1:8000/docs>
 
 ---
 
@@ -242,18 +260,20 @@ CyberSentinel AI is currently under active development.
 Completed components:
 
 - [X] Project architecture  
-- [X] Dataset versioning with DVC  
-- [X] MLflow experiment tracking  
-- [X] CI pipeline  
-- [X] Docker environment  
+- [X] Feature selection
+- [X] Preprocessing pipeline
+- [X] Binary classifier
+- [ ] Multi-class classifier
+- [X] FastAPI base API
+- [X] Docker environment
+- [X] CI pipeline
 
 Upcoming components:
 
-- [ ] Data ingestion module  
-- [ ] Feature engineering pipeline  
-- [ ] Model training workflow  
-- [ ] API inference service  
-- [ ] Streamlit dashboard
+- [ ] Multi-class evaluation
+- [ ] Decision mapping module
+- [ ] Dashboard visualization
+- [ ] Model tuning
 
 ---
 

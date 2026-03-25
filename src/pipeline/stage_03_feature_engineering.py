@@ -4,7 +4,7 @@ def run_feature_engineering(X_train, X_test):
 
     print("Stage 3: Feature Engineering")
 
-    X_train_feat = generate_features(X_train)
-    X_test_feat = generate_features(X_test)
+    x_train_feat = generate_features(X_train)
+    x_test_feat = generate_features(X_test)
 
-    return X_train_feat, X_test_feat
+    return x_train_feat, x_test_feat

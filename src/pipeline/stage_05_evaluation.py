@@ -1,9 +1,27 @@
-from src.models.evaluate import evaluate_model
+"""
+CyberSentinel AI — Pipeline Stage 05: Evaluation
+Delegates to src.models.evaluator (Stage 5 implementation).
+"""
+from src.models.evaluator import run_evaluation
 
-def run_evaluation(model, X_test, y_test):
 
-    print("Stage 5: Evaluation")
+def run_stage_05_evaluation(split: str = "test") -> dict:
+    """
+    Execute Stage 5 evaluation on both binary and multi-class models.
 
-    metrics = evaluate_model(model, X_test, y_test)
+    Loads test split from data/processed/, runs both models, computes
+    all metrics, saves JSON reports and PNG plots to models/eval/.
 
-    return metrics
+    Parameters
+    ----------
+    split : str
+        Data split to evaluate on ('test', 'val', or 'train').
+
+    Returns
+    -------
+    dict
+        Keys 'binary' and 'multiclass', each containing a metrics dict.
+    """
+    print(f"\n--- Stage 5: Evaluation (split='{split}') ---")
+    results = run_evaluation(split=split)
+    return results

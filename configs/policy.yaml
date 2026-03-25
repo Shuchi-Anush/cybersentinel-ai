@@ -1,0 +1,46 @@
+# CyberSentinel AI — Policy Configuration
+#
+# Controls how binary + multi-class predictions are translated into
+# firewall / SOC actions (ALLOW / QUARANTINE / DENY).
+#
+# Rules applied in order:
+#   1. binary == 0            → ALLOW  (never reads attack classes)
+#   2. binary == 1 + attack in deny_classes      → DENY
+#   3. binary == 1 + attack in quarantine_classes → QUARANTINE
+#   4. binary == 1 + attack in neither list      → default_attack_action
+#
+# Attack class names must match the label values in the CICIDS2017 dataset
+# and the classes learned by the multi-class model (models/multiclass/metadata.json).
+# Matching is case-insensitive and whitespace-trimmed.
+
+policy:
+
+  # ----------------------------------------------------------------
+  # DENY — block immediately; high operational impact / direct threat
+  # ----------------------------------------------------------------
+  deny_classes:
+    - DDoS
+    - DoS GoldenEye
+    - DoS Hulk
+    - DoS Slowhttptest
+    - DoS slowloris
+    - PortScan
+    - FTP-Patator
+    - SSH-Patator
+    - Bot
+
+  # ----------------------------------------------------------------
+  # QUARANTINE — isolate for investigation; lower confidence / impact
+  # ----------------------------------------------------------------
+  quarantine_classes:
+    - Web Attack – Brute Force
+    - Web Attack – XSS
+    - Web Attack – Sql Injection
+    - Infiltration
+    - Heartbleed
+
+  # ----------------------------------------------------------------
+  # Fallback action when attack type is not in either list above.
+  # Options: QUARANTINE | DENY
+  # ----------------------------------------------------------------
+  default_attack_action: QUARANTINE

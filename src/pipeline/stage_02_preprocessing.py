@@ -1,10 +1,28 @@
-from src.data.preprocess import clean_dataset
+"""
+CyberSentinel AI — Pipeline Stage 02: Preprocessing
+Delegates to src.features.preprocessor (Stage 2 implementation).
+"""
+from src.features.preprocessor import run_preprocessing
 
-def run_preprocessing(X_train, X_test):
 
-    print("Stage 2: Data Preprocessing")
+def run_stage_02_preprocessing() -> dict:
+    """
+    Execute Stage 2 preprocessing.
 
-    X_train_clean = clean_dataset(X_train)
-    X_test_clean = clean_dataset(X_test)
+    Loads merged_cleaned.csv, applies selected features, performs
+    stratified splits, fits + saves StandardScaler, and persists
+    all parquet splits to data/processed/.
 
-    return X_train_clean, X_test_clean
+    Returns
+    -------
+    dict
+        Keys: X_train, X_val, X_test, y_train_binary, y_val_binary,
+              y_test_binary, y_train_label, y_val_label, y_test_label
+    """
+    print("\n--- Stage 2: Preprocessing ---")
+    splits = run_preprocessing()
+    print(f"  Train rows  : {len(splits['X_train']):,}")
+    print(f"  Val rows    : {len(splits['X_val']):,}")
+    print(f"  Test rows   : {len(splits['X_test']):,}")
+    print(f"  Features    : {splits['X_train'].shape[1]}")
+    return splits

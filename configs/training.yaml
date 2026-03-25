@@ -1,8 +1,16 @@
 training:
-  test_size: 0.2
+  test_size: 0.15
+  val_size: 0.15
   random_state: 42
-  feature_selection_k: 25
-  pca_components: 12
+  feature_selection_k: 25   # legacy — kept for train_pipeline.py compatibility
+  pca_components: 12        # legacy — kept for train_pipeline.py compatibility
+
+feature_selection:
+  variance_threshold: 0.01   # drop features with variance <= this
+  correlation_threshold: 0.95 # drop one of each pair with |r| >= this
+  kbest_k: 40                # keep top-K features by ANOVA-F score
+  tree_top_n: 40             # keep top-N features by averaged tree importance
+  sample_for_corr: 100000    # max rows used when computing correlation matrix
 
 evaluation:
   metrics:
@@ -10,3 +18,20 @@ evaluation:
     - precision
     - recall
     - f1
+
+binary_training:
+  use_smote: true            # true = SMOTE | false = class_weight='balanced'
+  n_estimators: 300          # number of trees
+  max_depth: null            # null = grow until pure leaves
+  min_samples_leaf: 4        # min samples at a leaf node
+  max_features: sqrt         # feature subset per split
+  random_state: 42
+
+multiclass_training:
+  use_smote: true            # SMOTE applied to attack-only training subset
+  n_estimators: 300
+  max_depth: null
+  min_samples_leaf: 4
+  max_features: sqrt
+  random_state: 42
+
