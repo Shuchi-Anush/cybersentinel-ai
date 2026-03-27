@@ -1,119 +1,293 @@
-# 🚀 CyberSentinel-AI (ATF ML Core)
+# 🚀 CyberSentinel-AI
+
+Production-Grade Machine Learning Intrusion Detection System (IDS)
+
+![CyberSentinel Banner](docs/assets/banner.png)
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
-![Machine Learning](https://img.shields.io/badge/Scikit--Learn-green)
-![ONNX Runtime](https://img.shields.io/badge/ONNX-Runtime--Millisecond--Latency-orange)
-![FastAPI](https://img.shields.io/badge/FastAPI-enabled-teal)
-![Docker](https://img.shields.io/badge/Docker-ready-blue)
+![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-ML-green)
+![ONNX Runtime](https://img.shields.io/badge/ONNX-Runtime-orange)
+![FastAPI](https://img.shields.io/badge/FastAPI-Production-teal)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-
-CyberSentinel-AI is the **Machine Learning Inference Engine** designed for the **Adaptive Trust Framework (ATF)**. It acts as an intrusion detection system (IDS), digesting streaming network metrics and producing absolute, mathematically secure Bayesian Trust Scores for policy orchestration.
 
 ---
 
-## 🏗️ Architecture
+⚡ Overview
 
-CyberSentinel-AI operates as a highly uncoupled ML Core. It exclusively ingests processed `netrisk.json` packets and resolves them using a dual-state `scikit-learn` and `ONNX` execution pipeline. 
+CyberSentinel-AI is a production-grade Machine Learning Intrusion Detection System (IDS) designed to detect malicious network traffic in real-time and map it into actionable security decisions.
+
+Unlike traditional rule-based systems, CyberSentinel leverages:
+
+- Behavioral analysis
+- Ensemble learning
+- Calibrated probabilistic outputs
+- High-speed ONNX inference
+
+---
+
+🎯 Problem Statement
+
+Traditional IDS systems:
+
+- ❌ Depend on signatures
+- ❌ Fail on zero-day attacks
+- ❌ Struggle with encrypted / obfuscated traffic
+
+CyberSentinel-AI solves this by:
+
+- ✅ Learning traffic behavior
+- ✅ Generalizing across unseen patterns
+- ✅ Producing trust-aware decisions
+
+---
+
+🧠 Key Capabilities
+
+- 🔍 Binary Classification → Benign vs Attack
+- 🧠 Multi-class Classification → 14 attack categories
+- ⚡ ONNX Runtime → millisecond inference
+- 📊 Calibrated Trust Scores → real probabilities
+- 🛡 Policy Engine → ALLOW / QUARANTINE / DENY
+- 🔗 Modular API + Dashboard architecture
+
+---
+
+🏗️ System Architecture
+
+🔷 High-Level Pipeline
+
+![Pipeline Architecture](docs/assets/pipeline.png)
 
 ```mermaid
 graph TD
-    A[Adaptive Trust Framework] --> |netrisk.json| B(FastAPI Router)
-    B --> |ThreadPoolExecutor| C[Feature Strict Validation Layer]
-    C --> |Float Array| D[ONNX Binary Base Model]
-    C --> |Float Array| E[Isotonic Python Calibrator]
-    D --> |If Attack == 1| F[ONNX Multiclass Model]
-    E --> |Probability| G[Trust Score Clamping]
-    G --> H[Policy Mapper]
+    A[Raw Network Flow] --> B[Feature Validation]
+    B --> C[StandardScaler]
+    C --> D[ONNX Binary Model]
+    D -->|Attack| E[ONNX Multiclass Model]
+    D -->|Benign| H[Policy Engine]
+    D --> F[Calibrated Probability]
     F --> H
-    H --> |Decision| B
-    B --> |ALLOW / DENY / QUARANTINE| A
+    E --> H
+    H --> G[Decision]
 ```
-
-### The Inference Cascade
-1. **Validation**: HTTP inputs are forcefully evaluated via Pydantic bounding dropping injected `NaN` or un-tracked dimensions immediately returning `HTTP 422`.
-2. **ONNX Speed**: Multidimensional float models bypass Python Global Interpreters completely resolving tree-branching sub-10ms via native `ONNXRuntime` C-backends.
-3. **Isotonic Calibration**: Organic Pytest/Scikit execution wrappers wrap `CalibratedClassifierCV(method="isotonic")` to convert native forest algorithms into probabilistic trust vectors.
 
 ---
 
-## 🚀 Quickstart & Usage
+🔬 Inference Flow Breakdown
 
-### ⚙️ Using Python (Local)
+Input Flow
+   ↓
+Feature Validation (Strict Schema)
+   ↓
+Scaling (StandardScaler)
+   ↓
+Binary Classifier (ONNX)
+   ↓
+Calibrated Probability (Isotonic)
+   ↓
+Conditional Multiclass (ONNX)
+   ↓
+Policy Mapping
+   ↓
+Final Decision
 
-1. Clone and initialize:
-```bash
+---
+
+📊 Dashboard Preview
+
+🔮 Prediction Interface
+
+"Prediction" (docs/assets/predict.png)
+
+---
+
+📊 Evaluation Metrics
+
+"Evaluation" (docs/assets/evaluation.png)
+
+---
+
+⚙️ Policy Mapping
+
+"Policy" (docs/assets/policy.png)
+
+---
+
+🎥 Demo
+
+![Demo Execution](docs/assets/demo.gif)
+
+---
+
+🏆 Model Performance
+
+Binary Classification
+
+Accuracy   : 0.9983
+F1 Score   : 0.9983
+ROC-AUC    : 0.9999
+
+Multi-class Classification
+
+Accuracy   : 0.9972
+F1 Macro   : 0.88 – 0.91
+ROC-AUC    : ~0.9995
+
+---
+
+⚙️ ML Pipeline (Training Flow)
+
+1. Feature Selection
+2. Data Preprocessing
+3. Binary Model Training
+4. Multi-class Model Training
+5. Evaluation
+6. Policy Mapping
+7. Inference Pipeline
+8. API Deployment
+9. Dashboard
+
+---
+
+🧪 Testing & Validation
+
+ONNX vs Scikit Parity
+
+pytest tests/test_onnx_parity.py
+
+Edge Case Validation
+
+python tests/test_edge_cases.py
+
+Covered Cases
+
+- Missing features → HTTP 422
+- NaN / Inf injection → rejected
+- ONNX output corruption → guarded
+
+---
+
+🚀 Quickstart
+
+1. Setup
+
+git clone <https://github.com/><your-username>/cybersentinel-ai.git
+cd cybersentinel-ai
+
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-2. Generate or ensure that `/models/` artifacts exists (the system leverages decoupled storage parameters natively skipping massive Git limits):
-```bash
-# Verify the entire pipeline and generate binary constraints + ONNX bounds
+---
+
+1. Run Full Pipeline
+
 python -m src.pipeline.pipeline_runner
 python -m src.pipeline.export_onnx
-```
-
-3. Launch components:
-```bash
-# Launch FastAPI Engine:
-uvicorn src.api.main:app --port 8000 --workers 4
-
-# Launch Dashboard UI:
-streamlit run src/dashboard/app.py
-```
-
-### 🐳 Using Docker
-
-The containerized environment operates as a stripped, non-root hardened deployment layer.
-
-**Note:** The `/models/` directory is **deliberately excluded** from the Docker build layer securing image agility. It **MUST** be mapped as a runtime volume natively.
-
-```bash
-docker build -t cybersentinel-ai .
-docker run -d --name ids-engine \
-    -p 8000:8000 \
-    -v $(pwd)/models:/app/models \
-    cybersentinel-ai
-```
 
 ---
 
-## 🔌 API Documentation
+1. Start API
 
-All parameters are heavily bounded to exact geometry definitions generated by `features.pkl` natively.
+uvicorn src.api.main:app --reload
 
-**POST `/predict`**
-```bash
-curl -X POST "http://localhost:8000/predict" \
+---
+
+1. Launch Dashboard
+
+streamlit run src/dashboard/app.py
+
+---
+
+🐳 Docker Deployment
+
+docker build -t cybersentinel-ai .
+
+docker run -d \
+  -p 8000:8000 \
+  -v $(pwd)/models:/app/models \
+  cybersentinel-ai
+
+⚠️ Models are not bundled inside container.
+
+---
+
+🔌 API Usage
+
+POST /predict
+
+curl -X POST "<http://localhost:8000/predict>" \
      -H "Content-Type: application/json" \
-     -d '{
-           "features": {
-               "Flow Duration": 100,
-               "Total Fwd Packets": 2,
-               ... [40 exact selected parameters]
-           }
-         }'
-```
+     -d '{"features": {...}}'
 
-**Response Example:**
-```json
+Response
+
 {
   "action": "ALLOW",
-  "confidence": 0.814,
-  "attack_type": "Benign",
+  "confidence": 0.87,
+  "attack_type": null,
   "reason": "Traffic classified as benign."
 }
-```
 
 ---
 
-## 🧠 Model Geometry & Math
+🧠 Engineering Highlights
 
-* **Class Balancing**: We strictly avoided synthetic generation matrices like `SMOTE` maintaining geometric purity via `class_weight="balanced_subsample"` to accurately classify 14 extreme minority network attacks organic toCICIDS2017 matrices.
-* **Concurrency**: Bounded explicitly to `ThreadPoolExecutor(max_workers=4)` ensuring ASGI events successfully delegate parallel mathematical matrix processing without starving the underlying IO subsystem loop.
-* **Calibration**: Base binary outputs lack pure probabilistic meaning natively. `CalibratedClassifierCV` transforms voting thresholds into raw statistical confidence.
+⚡ ONNX Acceleration
+
+- Eliminates Python bottleneck
+- Enables millisecond inference
+
+📊 Probability Calibration
+
+- "CalibratedClassifierCV"
+- Converts tree outputs → real probabilities
+
+🛡 Input Safety
+
+- Strict schema validation
+- No silent failures
+- Rejects malformed payloads
+
+🔄 Concurrency Handling
+
+- ThreadPoolExecutor
+- Prevents API blocking
 
 ---
 
-*Authored by the CyberSentinel ML-LAB*
+📂 Project Structure
+
+src/
+├── api/
+├── core/
+├── dashboard/
+├── features/
+├── inference/
+├── models/
+├── pipeline/
+├── policy/
+└── training/
+
+---
+
+📌 Future Scope
+
+- SHAP Explainability (async workers)
+- Streaming Feature Engine (Zeek)
+- Kubernetes Deployment
+- Adaptive Trust Framework (ATF)
+
+---
+
+👨‍💻 Author
+
+Shuchi Anush S
+<https://github.com/Shuchi-Anush>
+
+---
+
+📜 License
+
+MIT License

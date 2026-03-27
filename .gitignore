@@ -83,3 +83,5 @@ Thumbs.db
 # Lint / debug
 ruff_errors.json
 ruff_errors2.json
+
+*.tmp
