@@ -1,20 +1,20 @@
-from pathlib import Path
 import pandas as pd
 
 # Dataset location
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = PROJECT_ROOT / "data" / "raw" / "CICIDS2017"
+from src.core.paths import DATA_DIR as BASE_DATA_DIR
+
+DATA_DIR = BASE_DATA_DIR / "raw" / "CICIDS2017"
 
 # Scenario split to prevent leakage
 TRAIN_FILES = [
     "Monday-WorkingHours.pcap_ISCX.csv",
     "Tuesday-WorkingHours.pcap_ISCX.csv",
-    "Wednesday-workingHours.pcap_ISCX.csv"
+    "Wednesday-workingHours.pcap_ISCX.csv",
 ]
 
 TEST_FILES = [
     "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
-    "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv"
+    "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
 ]
 
 

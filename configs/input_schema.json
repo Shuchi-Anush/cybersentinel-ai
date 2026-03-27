@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["features"],
+  "properties": {
+    "features": {
+      "type": "object",
+      "description": "40 engineered CICIDS features"
+    },
+    "metadata": {
+      "type": "object",
+      "optional": true
+    }
+  }
+}

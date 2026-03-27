@@ -2,6 +2,7 @@
 CyberSentinel AI — Pipeline Stage 02: Preprocessing
 Delegates to src.features.preprocessor (Stage 2 implementation).
 """
+
 from src.features.preprocessor import run_preprocessing
 
 
@@ -11,7 +12,7 @@ def run_stage_02_preprocessing() -> dict:
 
     Loads merged_cleaned.csv, applies selected features, performs
     stratified splits, fits + saves StandardScaler, and persists
-    all parquet splits to data/processed/.
+    all parquet splits to DATA_DIR / "processed".
 
     Returns
     -------
@@ -25,4 +26,4 @@ def run_stage_02_preprocessing() -> dict:
     print(f"  Val rows    : {len(splits['X_val']):,}")
     print(f"  Test rows   : {len(splits['X_test']):,}")
     print(f"  Features    : {splits['X_train'].shape[1]}")
-    return splits
+    return splits

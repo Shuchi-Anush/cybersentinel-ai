@@ -1,5 +1,6 @@
 from src.data.load_data import load_cic_dataset
 
+
 def run_data_ingestion():
     print("Stage 1: Data Ingestion")
 

@@ -3,17 +3,17 @@ CyberSentinel AI
 Model Training with MLflow Tracking
 """
 
-import os
 import mlflow
 import mlflow.sklearn
 import pandas as pd
 
+from src.core.paths import DATA_DIR
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 
 
 def train():
@@ -24,11 +24,10 @@ def train():
     mlflow.set_experiment("cybersentinel_intrusion_detection")
 
     with mlflow.start_run():
-
         # -----------------------------
         # Load processed dataset
         # -----------------------------
-        df = pd.read_csv("data/processed/processed_data.csv")
+        df = pd.read_csv(DATA_DIR / "processed" / "processed_data.csv")
 
         X = df.drop("Label", axis=1)
         y = df["Label"]

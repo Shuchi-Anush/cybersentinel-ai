@@ -32,7 +32,8 @@ logs/*
 artifacts/*
 !artifacts/.gitkeep
 
-outputs/
+outputs/*
+!outputs/.gitkeep
 
 # ===============================
 # Data
@@ -51,9 +52,34 @@ data/processed/*
 # MLflow
 # ===============================
 mlflow.db
-mlruns/
+mlruns/*
+!mlruns/.gitkeep
 
 # ===============================
 # Jupyter
 # ===============================
-.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+notebooks/**/.ipynb_checkpoints/
+
+# tests:
+tests/__pycache__/
+
+# ===============================
+# OS / Editor
+# ===============================
+.DS_Store
+Thumbs.db
+.vscode/
+
+# ===============================
+# Databases
+# ===============================
+*.db
+*.sqlite3
+
+# Local experiments
+*.csv
+
+# Lint / debug
+ruff_errors.json
+ruff_errors2.json

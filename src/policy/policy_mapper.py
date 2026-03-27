@@ -58,16 +58,19 @@ logger = logging.getLogger("policy_mapper")
 # Paths
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-POLICY_CONFIG_PATH = PROJECT_ROOT / "configs" / "policy.yaml"
+from src.core.paths import CONFIGS_DIR
+
+POLICY_CONFIG_PATH = CONFIGS_DIR / "policy.yaml"
 
 
 # ------------------------------------------------------------------
 # Policy action enum
 # ------------------------------------------------------------------
 
+
 class PolicyAction(str, Enum):
     """Possible firewall / SOC actions."""
+
     ALLOW = "ALLOW"
     QUARANTINE = "QUARANTINE"
     DENY = "DENY"
@@ -76,6 +79,7 @@ class PolicyAction(str, Enum):
 # ------------------------------------------------------------------
 # PolicyDecision dataclass
 # ------------------------------------------------------------------
+
 
 @dataclass
 class PolicyDecision:
@@ -99,12 +103,15 @@ class PolicyDecision:
     reason : str
         Human-readable explanation for the chosen action.
     """
+
     action: PolicyAction
     binary_pred: int
     confidence: float
     attack_type: Optional[str] = None
     attack_proba: Optional[dict[str, float]] = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     reason: str = ""
 
     def to_dict(self) -> dict:
@@ -124,6 +131,7 @@ class PolicyDecision:
 # ------------------------------------------------------------------
 # Policy config loader
 # ------------------------------------------------------------------
+
 
 def _load_policy_config() -> dict:
     """
@@ -173,6 +181,7 @@ def _default_policy() -> dict:
 # PolicyMapper class
 # ------------------------------------------------------------------
 
+
 class PolicyMapper:
     """
     Maps model predictions to policy decisions.
@@ -207,10 +216,14 @@ class PolicyMapper:
         self._quarantine: frozenset[str] = frozenset(
             c.strip().lower() for c in cfg.get("quarantine_classes", [])
         )
-        self._default_attack_action: str = cfg.get("default_attack_action", "QUARANTINE").upper()
+        self._default_attack_action: str = cfg.get(
+            "default_attack_action", "QUARANTINE"
+        ).upper()
         logger.info(
             "PolicyMapper loaded — deny=%d classes  quarantine=%d classes  default=%s",
-            len(self._deny), len(self._quarantine), self._default_attack_action,
+            len(self._deny),
+            len(self._quarantine),
+            self._default_attack_action,
         )
 
     @staticmethod
@@ -267,7 +280,8 @@ class PolicyMapper:
             confidence=round(binary_confidence, 6),
             attack_type=attack_type,
             attack_proba={k: round(v, 6) for k, v in attack_proba.items()}
-            if attack_proba else None,
+            if attack_proba
+            else None,
             reason=reason,
         )
 
@@ -278,7 +292,10 @@ class PolicyMapper:
         if attack_type is None:
             # Binary flagged as attack but no multi-class prediction available
             fallback = PolicyAction(self._default_attack_action)
-            return fallback, "Attack detected; attack type unavailable — applying default policy."
+            return (
+                fallback,
+                "Attack detected; attack type unavailable — applying default policy.",
+            )
 
         normalised = attack_type.strip().lower()
 
@@ -364,6 +381,7 @@ class PolicyMapper:
 # Module-level convenience function
 # ------------------------------------------------------------------
 
+
 def map_prediction(
     binary_pred: int,
     binary_confidence: float,
@@ -388,7 +406,9 @@ def map_prediction(
     PolicyDecision
     """
     mapper = PolicyMapper()
-    return mapper.map_prediction(binary_pred, binary_confidence, attack_type, attack_proba)
+    return mapper.map_prediction(
+        binary_pred, binary_confidence, attack_type, attack_proba
+    )
 
 
 # ------------------------------------------------------------------

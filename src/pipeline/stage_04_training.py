@@ -3,6 +3,7 @@ CyberSentinel AI — Pipeline Stage 04: Binary + Multi-class Training
 Orchestrates Stage 3 (binary) then Stage 4 (multi-class) in sequence.
 Binary model must exist before multi-class can filter attack rows.
 """
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
@@ -16,11 +17,11 @@ def run_stage_04_training() -> dict:
 
     Step 1 — Binary classifier (Benign vs Attack)
         Loads scaled train/val splits from Stage 2.
-        Saves model to models/binary/.
+        Saves model to MODELS_DIR / "binary".
 
     Step 2 — Multi-class classifier (Attack type)
         Loads same splits; filters to attack rows only (binary==1).
-        Saves model + encoder to models/multiclass/.
+        Saves model + encoder to MODELS_DIR / "multiclass".
 
     Returns
     -------

@@ -6,7 +6,6 @@ Training Pipeline
 Author: CyberSentinel ML-LAB
 """
 
-from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,11 +30,11 @@ import joblib
 # PATH CONFIGURATION
 # ---------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from src.core.paths import DATA_DIR as BASE_DATA_DIR, MODELS_DIR
 
-DATA_DIR = PROJECT_ROOT / "data" / "raw" / "CICIDS2017"
-MODEL_DIR = PROJECT_ROOT / "models"
-OUTPUT_DIR = PROJECT_ROOT / "outputs"
+DATA_DIR = BASE_DATA_DIR / "raw" / "CICIDS2017"
+MODEL_DIR = MODELS_DIR
+OUTPUT_DIR = MODELS_DIR.parent / "outputs"
 
 MODEL_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -48,18 +47,19 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 TRAIN_FILES = [
     "Monday-WorkingHours.pcap_ISCX.csv",
     "Tuesday-WorkingHours.pcap_ISCX.csv",
-    "Wednesday-workingHours.pcap_ISCX.csv"
+    "Wednesday-workingHours.pcap_ISCX.csv",
 ]
 
 TEST_FILES = [
     "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
-    "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv"
+    "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
 ]
 
 
 # ---------------------------------------------------------
 # LOAD DATA
 # ---------------------------------------------------------
+
 
 def load_cic_dataset(file_list):
     """Load multiple CICIDS CSV files"""
@@ -87,6 +87,7 @@ def load_cic_dataset(file_list):
 # DATA CLEANING
 # ---------------------------------------------------------
 
+
 def clean_dataset(df):
     """Fix CIC-IDS2017 data issues"""
 
@@ -108,6 +109,7 @@ def clean_dataset(df):
 # PREPARE FEATURES
 # ---------------------------------------------------------
 
+
 def prepare_features(df):
     """Split features and label"""
 
@@ -124,16 +126,12 @@ def prepare_features(df):
 # VISUALIZATION
 # ---------------------------------------------------------
 
+
 def plot_confusion_matrix(cm, model_name):
 
-    plt.figure(figsize=(6,5))
+    plt.figure(figsize=(6, 5))
 
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues"
-    )
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
 
     plt.title(f"{model_name} Confusion Matrix")
 
@@ -150,6 +148,7 @@ def plot_confusion_matrix(cm, model_name):
 # ---------------------------------------------------------
 # TRAIN MODELS
 # ---------------------------------------------------------
+
 
 def train_models():
 
@@ -175,33 +174,22 @@ def train_models():
     # -----------------------------------------------------
 
     pipelines = {
-
-        "decision_tree": Pipeline([
-
-            ("select", SelectKBest(score_func=f_classif, k=25)),
-
-            ("scale", StandardScaler()),
-
-            ("pca", PCA(n_components=12)),
-
-            ("model", DecisionTreeClassifier(
-                random_state=42
-            ))
-
-        ]),
-
-        "naive_bayes": Pipeline([
-
-            ("select", SelectKBest(score_func=f_classif, k=25)),
-
-            ("scale", StandardScaler()),
-
-            ("pca", PCA(n_components=12)),
-
-            ("model", GaussianNB())
-
-        ])
-
+        "decision_tree": Pipeline(
+            [
+                ("select", SelectKBest(score_func=f_classif, k=25)),
+                ("scale", StandardScaler()),
+                ("pca", PCA(n_components=12)),
+                ("model", DecisionTreeClassifier(random_state=42)),
+            ]
+        ),
+        "naive_bayes": Pipeline(
+            [
+                ("select", SelectKBest(score_func=f_classif, k=25)),
+                ("scale", StandardScaler()),
+                ("pca", PCA(n_components=12)),
+                ("model", GaussianNB()),
+            ]
+        ),
     }
 
     results = {}
@@ -211,28 +199,17 @@ def train_models():
     # -----------------------------------------------------
 
     for name, pipeline in pipelines.items():
-
         print(f"\nTraining {name}...")
 
         pipeline.fit(X_train, y_train_enc)
 
         predictions = pipeline.predict(X_test)
 
-        f1 = f1_score(
-            y_test_enc,
-            predictions,
-            average="weighted"
-        )
+        f1 = f1_score(y_test_enc, predictions, average="weighted")
 
-        report = classification_report(
-            y_test_enc,
-            predictions
-        )
+        report = classification_report(y_test_enc, predictions)
 
-        cm = confusion_matrix(
-            y_test_enc,
-            predictions
-        )
+        cm = confusion_matrix(y_test_enc, predictions)
 
         print(report)
 
@@ -266,7 +243,6 @@ def train_models():
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
-
     print("\nCyberSentinel AI Training Pipeline\n")
 
     train_models()

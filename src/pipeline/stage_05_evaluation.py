@@ -2,6 +2,7 @@
 CyberSentinel AI — Pipeline Stage 05: Evaluation
 Delegates to src.models.evaluator (Stage 5 implementation).
 """
+
 from src.models.evaluator import run_evaluation
 
 
@@ -9,8 +10,8 @@ def run_stage_05_evaluation(split: str = "test") -> dict:
     """
     Execute Stage 5 evaluation on both binary and multi-class models.
 
-    Loads test split from data/processed/, runs both models, computes
-    all metrics, saves JSON reports and PNG plots to models/eval/.
+    Loads test split from DATA_DIR / "processed", runs both models, computes
+    all metrics, saves JSON reports and PNG plots to EVAL_DIR.
 
     Parameters
     ----------

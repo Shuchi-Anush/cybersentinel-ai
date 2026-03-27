@@ -34,11 +34,12 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-from src.features.selector import load_selected_features
 from src.features.preprocessor import load_scaler
 from src.training.binary_trainer import load_binary_model
 from src.training.multiclass_trainer import load_multiclass_model
 from src.policy.policy_mapper import PolicyDecision, PolicyMapper
+from fastapi import HTTPException
+import joblib
 
 # ------------------------------------------------------------------
 # Logging
@@ -55,14 +56,15 @@ logger = logging.getLogger("inference_pipeline")
 # Paths
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-MODELS_DIR = PROJECT_ROOT / "models"
+from src.core.paths import DATA_DIR, MODELS_DIR
+
+PROCESSED_DIR = DATA_DIR / "processed"
 
 
 # ==================================================================
 # InferencePipeline
 # ==================================================================
+
 
 class InferencePipeline:
     """
@@ -108,25 +110,35 @@ class InferencePipeline:
         t0 = time.time()
         logger.info("Loading inference artifacts…")
 
-        self._features: list[str] = load_selected_features(features_path)
+        self._features: list[str] = joblib.load(MODELS_DIR / "binary" / "features.pkl")
         self._scaler = load_scaler(scaler_path)
-        self._binary_model = load_binary_model(binary_model_dir)
-        self._mc_model, self._encoder = load_multiclass_model(multiclass_model_dir)
+        import onnxruntime as rt
+        
+        self._binary_sess = rt.InferenceSession(
+            str(MODELS_DIR / "binary" / "base_binary_model.onnx"),
+            providers=["CPUExecutionProvider"]
+        )
+        self._mc_sess = rt.InferenceSession(
+            str(MODELS_DIR / "multiclass" / "multiclass_model.onnx"),
+            providers=["CPUExecutionProvider"]
+        )
+        self._calibrated_binary = joblib.load(MODELS_DIR / "binary" / "calibrated_binary_model.pkl")
+        _, self._encoder = load_multiclass_model(multiclass_model_dir)
         self._policy = PolicyMapper(policy_config_path)
         self._threshold = float(binary_threshold)
 
         logger.info(
             "InferencePipeline ready — %d features  threshold=%.2f  (%.2fs)",
-            len(self._features), self._threshold, time.time() - t0,
+            len(self._features),
+            self._threshold,
+            time.time() - t0,
         )
 
     # ----------------------------------------------------------------
     # Public methods
     # ----------------------------------------------------------------
 
-    def predict_one(
-        self, row: Union[dict, pd.Series]
-    ) -> PolicyDecision:
+    def predict_one(self, row: Union[dict, pd.Series]) -> PolicyDecision:
         """
         Run the full inference cascade on a single network flow.
 
@@ -146,9 +158,7 @@ class InferencePipeline:
         results = self.predict(df_single)
         return results[0]
 
-    def predict(
-        self, df: pd.DataFrame
-    ) -> list[PolicyDecision]:
+    def predict(self, df: pd.DataFrame) -> list[PolicyDecision]:
         """
         Run the full inference cascade on a batch of network flows.
 
@@ -179,10 +189,25 @@ class InferencePipeline:
             dtype=np.float32,
         )
 
-        # ---- 3. Binary prediction -----------------------------------
-        binary_proba = self._binary_model.predict_proba(x_scaled)
-        attack_proba_col = binary_proba[:, 1]                      # P(attack)
-        binary_preds = (attack_proba_col >= self._threshold).astype(int)
+        # ---- 3. Binary prediction (ONNX Base + Python Calibrated) ----
+        # Enforce exact feature ordering BEFORE inference
+        x_scaled = x_scaled[self._features].copy()
+        x_numpy = x_scaled.to_numpy(dtype=np.float32)
+        
+        input_b = self._binary_sess.get_inputs()[0].name
+        outputs_b = self._binary_sess.run(None, {input_b: x_numpy})
+        
+        if len(outputs_b) < 2:
+            raise RuntimeError("ONNX output malformed")
+            
+        binary_preds = outputs_b[0]
+        _ = outputs_b[1]
+        
+        attack_proba_col = self._calibrated_binary.predict_proba(x_scaled)[:, 1]  # P(attack)
+        
+        # trust score clamp (safety)
+        attack_proba_col = np.clip(attack_proba_col, 0.0, 1.0)
+        
         binary_confidences = np.where(
             binary_preds == 1, attack_proba_col, 1.0 - attack_proba_col
         )
@@ -191,11 +216,19 @@ class InferencePipeline:
         attack_types: list[Optional[str]] = [None] * len(df)
         attack_probas: list[Optional[dict[str, float]]] = [None] * len(df)
 
-        attack_indices = np.where(binary_preds == 1)[0]
+        attack_indices = np.nonzero(binary_preds == 1)[0]
         if len(attack_indices) > 0:
             x_attack = x_scaled.iloc[attack_indices]
-            mc_proba = self._mc_model.predict_proba(x_attack)
-            mc_preds = self._mc_model.predict(x_attack)
+            x_attack_np = x_attack.to_numpy(dtype=np.float32)
+            input_m = self._mc_sess.get_inputs()[0].name
+            
+            mc_outputs = self._mc_sess.run(None, {input_m: x_attack_np})
+            
+            if len(mc_outputs) < 2:
+                raise RuntimeError("ONNX output malformed")
+                
+            mc_preds = mc_outputs[0]
+            mc_proba = mc_outputs[1]  # List of dicts in ONNX output format
             class_names = self._encoder.classes_.tolist()
 
             for local_i, global_i in enumerate(attack_indices):
@@ -203,8 +236,10 @@ class InferencePipeline:
                 attack_types[global_i] = self._encoder.inverse_transform(
                     [predicted_class_idx]
                 )[0]
+                # Format probas explicitly based on ONNX dictionary structure
+                raw_probas = mc_proba[local_i]
                 attack_probas[global_i] = {
-                    cls: round(float(mc_proba[local_i, j]), 6)
+                    cls: round(float(raw_probas.get(j, 0.0)), 6)
                     for j, cls in enumerate(class_names)
                 }
 
@@ -216,11 +251,17 @@ class InferencePipeline:
             attack_probas=attack_probas,
         )
 
+        # Structured logging step 8
+        for d in decisions:
+            logger.info(f"Action={d.action.value} | Trust={d.confidence:.4f} | Attack={d.attack_type}")
+
         elapsed = time.time() - t0
         logger.info(
             "Processed %d flows in %.3fs  (%.1f flows/sec) — "
             "ALLOW=%d  QUARANTINE=%d  DENY=%d",
-            len(df), elapsed, len(df) / elapsed if elapsed > 0 else float("inf"),
+            len(df),
+            elapsed,
+            len(df) / elapsed if elapsed > 0 else float("inf"),
             sum(1 for d in decisions if d.action.value == "ALLOW"),
             sum(1 for d in decisions if d.action.value == "QUARANTINE"),
             sum(1 for d in decisions if d.action.value == "DENY"),
@@ -245,7 +286,7 @@ class InferencePipeline:
         rows = []
         for d in decisions:
             row = d.to_dict()
-            row.pop("attack_proba", None)   # too wide for tabular display
+            row.pop("attack_proba", None)  # too wide for tabular display
             rows.append(row)
         return pd.DataFrame(rows)
 
@@ -264,17 +305,18 @@ class InferencePipeline:
         """
         missing_cols = [f for f in self._features if f not in df.columns]
         if missing_cols:
-            logger.warning(
-                "%d selected features missing from input — filling with 0.0: %s…",
-                len(missing_cols), missing_cols[:5],
+            raise HTTPException(
+                status_code=422,
+                detail=f"Missing {len(missing_cols)} required features: {list(missing_cols)[:5]}..."
             )
-            for col in missing_cols:
-                df = df.copy()
-                df[col] = 0.0
 
+        # Enforce exact feature ordering
         x = df[self._features].copy()
+        
         x = x.replace([np.inf, -np.inf], np.nan)
-        x = x.fillna(0.0)
+        if x.isnull().values.any():
+            raise HTTPException(status_code=422, detail="Invalid numeric values (inf/NaN) in payload")
+            
         return x.astype(np.float32)
 
 
@@ -346,19 +388,31 @@ def predict_one(
 
 if __name__ == "__main__":
     import argparse
-    import json
 
     parser = argparse.ArgumentParser(
         description="CyberSentinel-AI — Inference Pipeline (Stage 7)"
     )
-    parser.add_argument("--csv", type=Path, default=None,
-                        help="Path to a CSV file of raw network flows to predict")
-    parser.add_argument("--threshold", type=float, default=0.5,
-                        help="Binary attack probability threshold (default: 0.5)")
-    parser.add_argument("--output", type=Path, default=None,
-                        help="Save results to this CSV path")
-    parser.add_argument("--sample", type=int, default=5,
-                        help="Number of rows to print from results (default: 5)")
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        help="Path to a CSV file of raw network flows to predict",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.5,
+        help="Binary attack probability threshold (default: 0.5)",
+    )
+    parser.add_argument(
+        "--output", type=Path, default=None, help="Save results to this CSV path"
+    )
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=5,
+        help="Number of rows to print from results (default: 5)",
+    )
     args = parser.parse_args()
 
     pipeline = InferencePipeline(binary_threshold=args.threshold)
@@ -370,16 +424,17 @@ if __name__ == "__main__":
         # Demo: use a small slice from the processed test split
         logger.info("No CSV provided — loading sample rows from test split…")
         from src.features.preprocessor import load_splits
+
         x_test, _, _ = load_splits("test")
         df_input = x_test.head(20)
 
     decisions = pipeline.predict(df_input)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Inference Results")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for i, d in enumerate(decisions[: args.sample]):
-        print(f"  [{i+1}] {d}")
+        print(f"  [{i + 1}] {d}")
 
     if args.output:
         result_df = InferencePipeline.to_dataframe(decisions)

@@ -4,7 +4,8 @@ CyberSentinel AI — src/models/evaluate.py
 Legacy compatibility shim.
 New code should use:  from src.models.evaluator import run_evaluation
 """
-from src.models.evaluator import run_evaluation, evaluate_binary, evaluate_multiclass
+
+from src.models.evaluator import run_evaluation
 
 
 def evaluate_model(model, x_test, y_test):

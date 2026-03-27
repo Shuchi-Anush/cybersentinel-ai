@@ -12,11 +12,11 @@ Pipeline:
     2. Optionally over-sample the minority class with SMOTE
     3. Train a RandomForest baseline (class_weight='balanced' fallback)
     4. Evaluate on val set → classification report, ROC-AUC, F1
-    5. Save model to models/binary/model.pkl
+    5. Save model to MODELS_DIR / "binary" / "model.pkl"
     6. Save metadata.json with metrics, config, and feature list
 
 Outputs:
-    models/binary/
+    MODELS_DIR / "binary"
         model.pkl
         metadata.json
 """
@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Optional
 
 import joblib
-import numpy as np
 import pandas as pd
 import yaml
 from sklearn.ensemble import RandomForestClassifier
@@ -61,17 +60,19 @@ logger = logging.getLogger("binary_trainer")
 # Paths
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELS_DIR = PROJECT_ROOT / "models" / "binary"
-CONFIG_PATH = PROJECT_ROOT / "configs" / "training.yaml"
+from src.core.paths import MODELS_DIR, CONFIGS_DIR
+
+BINARY_MODELS_DIR = MODELS_DIR / "binary"
+CONFIG_PATH = CONFIGS_DIR / "training.yaml"
 MODEL_FILENAME = "model.pkl"
-MODEL_PATH = MODELS_DIR / MODEL_FILENAME
-METADATA_PATH = MODELS_DIR / "metadata.json"
+MODEL_PATH = BINARY_MODELS_DIR / MODEL_FILENAME
+METADATA_PATH = BINARY_MODELS_DIR / "metadata.json"
 
 
 # ------------------------------------------------------------------
 # Config
 # ------------------------------------------------------------------
+
 
 def _load_config() -> dict:
     if CONFIG_PATH.exists():
@@ -84,6 +85,7 @@ def _load_config() -> dict:
 # ------------------------------------------------------------------
 # Class-imbalance handling
 # ------------------------------------------------------------------
+
 
 def _apply_smote(
     x_train: pd.DataFrame,
@@ -98,13 +100,16 @@ def _apply_smote(
     """
     try:
         from imblearn.over_sampling import SMOTE  # type: ignore
-        smote = SMOTE(random_state=random_state, n_jobs=-1)
+
+        smote = SMOTE(random_state=random_state)
         x_res, y_res = smote.fit_resample(x_train, y_train)
         x_res = pd.DataFrame(x_res, columns=x_train.columns)
         y_res = pd.Series(y_res, name=y_train.name)
         logger.info(
             "SMOTE applied — train size: %d → %d  |  class dist: %s",
-            len(x_train), len(x_res), dict(y_res.value_counts()),
+            len(x_train),
+            len(x_res),
+            dict(y_res.value_counts()),
         )
         return x_res, y_res
     except ImportError:
@@ -121,8 +126,9 @@ def _apply_smote(
 # Evaluation helper
 # ------------------------------------------------------------------
 
+
 def _evaluate(
-    model: RandomForestClassifier,
+    model,
     x: pd.DataFrame,
     y: pd.Series,
     split_name: str,
@@ -137,8 +143,12 @@ def _evaluate(
     metrics = {
         "split": split_name,
         "accuracy": round(float(report["accuracy"]), 6),
-        "f1_weighted": round(float(f1_score(y, y_pred, average="weighted", zero_division=0)), 6),
-        "f1_macro": round(float(f1_score(y, y_pred, average="macro", zero_division=0)), 6),
+        "f1_weighted": round(
+            float(f1_score(y, y_pred, average="weighted", zero_division=0)), 6
+        ),
+        "f1_macro": round(
+            float(f1_score(y, y_pred, average="macro", zero_division=0)), 6
+        ),
         "precision_weighted": round(
             float(precision_score(y, y_pred, average="weighted", zero_division=0)), 6
         ),
@@ -163,6 +173,7 @@ def _evaluate(
 # ------------------------------------------------------------------
 # Public trainer
 # ------------------------------------------------------------------
+
 
 def train_binary_classifier(
     use_smote: Optional[bool] = None,
@@ -197,7 +208,7 @@ def train_binary_classifier(
     n_jobs : int
         Parallelism; -1 = all cores.
     model_dir : Path, optional
-        Override save directory (default models/binary/).
+        Override save directory (default MODELS_DIR / "binary").
 
     Returns
     -------
@@ -209,13 +220,22 @@ def train_binary_classifier(
 
     # Resolve params (caller > config > default)
     use_smote = use_smote if use_smote is not None else cfg.get("use_smote", True)
-    n_estimators = n_estimators if n_estimators is not None else cfg.get("n_estimators", 300)
+    n_estimators = (
+        n_estimators if n_estimators is not None else cfg.get("n_estimators", 300)
+    )
     max_depth = max_depth if max_depth is not None else cfg.get("max_depth", None)
-    min_samples_leaf = min_samples_leaf if min_samples_leaf is not None \
+    min_samples_leaf = (
+        min_samples_leaf
+        if min_samples_leaf is not None
         else cfg.get("min_samples_leaf", 4)
-    max_features = max_features if max_features is not None else cfg.get("max_features", "sqrt")
-    random_state = random_state if random_state is not None else cfg.get("random_state", 42)
-    model_dir = model_dir or MODELS_DIR
+    )
+    max_features = (
+        max_features if max_features is not None else cfg.get("max_features", "sqrt")
+    )
+    random_state = (
+        random_state if random_state is not None else cfg.get("random_state", 42)
+    )
+    model_dir = model_dir or BINARY_MODELS_DIR
     model_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- load splits from Stage 2 -----------------------------------
@@ -227,19 +247,22 @@ def train_binary_classifier(
     feature_names = x_train.columns.tolist()
     logger.info(
         "Train: %d rows  |  Val: %d rows  |  Features: %d",
-        len(x_train), len(x_val), len(feature_names),
+        len(x_train),
+        len(x_val),
+        len(feature_names),
     )
     logger.info("Train class distribution: %s", dict(y_train_binary.value_counts()))
 
     # ---- class-imbalance handling -----------------------------------
     if use_smote:
         x_train, y_train_binary = _apply_smote(x_train, y_train_binary, random_state)
-        class_weight_param = None          # SMOTE handles balance
+        class_weight_param = None  # SMOTE handles balance
     else:
-        class_weight_param = "balanced"    # Let RF handle it natively
+        class_weight_param = "balanced"  # Let RF handle it natively
         logger.info("Using class_weight='balanced' instead of SMOTE.")
 
     # ---- build and train the model ----------------------------------
+    from sklearn.calibration import CalibratedClassifierCV
     model = RandomForestClassifier(
         n_estimators=n_estimators,
         max_depth=max_depth,
@@ -254,26 +277,44 @@ def train_binary_classifier(
     logger.info(
         "Training RandomForest — n_estimators=%d  max_depth=%s  "
         "min_samples_leaf=%d  max_features=%s  class_weight=%s",
-        n_estimators, max_depth, min_samples_leaf, max_features,
+        n_estimators,
+        max_depth,
+        min_samples_leaf,
+        max_features,
         class_weight_param if not use_smote else "none (SMOTE used)",
     )
 
     model.fit(x_train, y_train_binary)
-    logger.info("Training complete in %.1fs", time.time() - t0)
+    logger.info("Base RF Training complete in %.1fs", time.time() - t0)
+
+    # ---- calibrate model --------------------------------------------
+    logger.info("Running isotonic calibration on validation data...")
+    calibrated_model = CalibratedClassifierCV(
+        estimator=model, method="isotonic", cv="prefit"
+    )
+    calibrated_model.fit(x_val, y_val_binary)
 
     # ---- evaluate on val set ----------------------------------------
-    val_metrics = _evaluate(model, x_val, y_val_binary, "val")
+    # Evaluate calibrated probabilities
+    val_metrics = _evaluate(calibrated_model, x_val, y_val_binary, "val")
 
-    # ---- save model -------------------------------------------------
-    model_path = model_dir / MODEL_FILENAME
-    joblib.dump(model, model_path)
-    logger.info("Saved model → %s", model_path)
+    # ---- save models and features -----------------------------------
+    base_model_path = model_dir / "base_binary_model.pkl"
+    calib_model_path = model_dir / "calibrated_binary_model.pkl"
+    features_path = model_dir / "features.pkl"
+    
+    joblib.dump(model, base_model_path)
+    joblib.dump(calibrated_model, calib_model_path)
+    joblib.dump(feature_names, features_path)
+    
+    logger.info("Saved base model → %s", base_model_path)
+    logger.info("Saved calibrated model → %s", calib_model_path)
+    logger.info("Saved feature names → %s", features_path)
 
     # ---- build feature importance table -----------------------------
-    importance_df = (
-        pd.Series(model.feature_importances_, index=feature_names)
-        .sort_values(ascending=False)
-    )
+    importance_df = pd.Series(
+        model.feature_importances_, index=feature_names
+    ).sort_values(ascending=False)
     top_20_importances = importance_df.head(20).to_dict()
 
     # ---- save metadata ----------------------------------------------
@@ -301,7 +342,8 @@ def train_binary_classifier(
         "top_20_feature_importances": {
             k: round(float(v), 8) for k, v in top_20_importances.items()
         },
-        "model_path": str(model_path),
+        "base_model_path": str(base_model_path),
+        "calibrated_model_path": str(calib_model_path),
         "elapsed_seconds": round(elapsed, 2),
     }
 
@@ -332,6 +374,7 @@ def train_binary_classifier(
 # Model loader (used by inference + Stage 4 multi-class pipeline)
 # ------------------------------------------------------------------
 
+
 def load_binary_model(model_dir: Optional[Path] = None) -> RandomForestClassifier:
     """
     Load the saved binary classifier from disk.
@@ -339,13 +382,13 @@ def load_binary_model(model_dir: Optional[Path] = None) -> RandomForestClassifie
     Parameters
     ----------
     model_dir : Path, optional
-        Directory containing model.pkl.  Defaults to models/binary/.
+        Directory containing model.pkl.  Defaults to MODELS_DIR / "binary".
 
     Returns
     -------
     RandomForestClassifier
     """
-    model_dir = model_dir or MODELS_DIR
+    model_dir = model_dir or BINARY_MODELS_DIR
     path = model_dir / MODEL_FILENAME
     if not path.exists():
         raise FileNotFoundError(
@@ -367,8 +410,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="CyberSentinel-AI — Binary Classifier Training (Stage 3)"
     )
-    parser.add_argument("--no-smote", action="store_true",
-                        help="Disable SMOTE; use class_weight='balanced' instead")
+    parser.add_argument(
+        "--no-smote",
+        action="store_true",
+        help="Disable SMOTE; use class_weight='balanced' instead",
+    )
     parser.add_argument("--n-estimators", type=int, default=None)
     parser.add_argument("--max-depth", type=int, default=None)
     parser.add_argument("--min-samples-leaf", type=int, default=None)

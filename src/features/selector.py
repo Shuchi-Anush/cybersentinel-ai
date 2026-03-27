@@ -11,7 +11,7 @@ Runs four complementary selection methods in sequence:
     3. SelectKBest (ANOVA-F)— keeps top-K features by F-score vs binary label
     4. Tree-Based Importance— ranks remaining features by RandomForest importance
 
-Saves results to: data/processed/selected_features.json
+Saves results to: configs/selected_features.json
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.feature_selection import SelectKBest, VarianceThreshold, f_classif
 
 import yaml
+from src.core.paths import CONFIGS_DIR
 
 # ------------------------------------------------------------------
 # Logging
@@ -45,15 +46,18 @@ logger = logging.getLogger("selector")
 # Path configuration (mirrors train_pipeline.py convention)
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-CONFIG_PATH = PROJECT_ROOT / "configs" / "training.yaml"
-OUTPUT_PATH = PROCESSED_DIR / "selected_features.json"
+from src.core.paths import DATA_DIR
+
+PROCESSED_DIR = DATA_DIR / "processed"
+
+CONFIG_PATH = CONFIGS_DIR / "training.yaml"
+OUTPUT_PATH = CONFIGS_DIR / "selected_features.json"
 
 
 # ------------------------------------------------------------------
 # Config loader
 # ------------------------------------------------------------------
+
 
 def _load_config() -> dict:
     """Load training.yaml; return an empty dict if not found."""
@@ -68,6 +72,7 @@ def _load_config() -> dict:
 # Private helpers (reduce cognitive complexity of orchestrator)
 # ------------------------------------------------------------------
 
+
 def _resolve_params(
     cfg: dict,
     data_path: Optional[Path],
@@ -80,13 +85,26 @@ def _resolve_params(
     """Merge caller-supplied overrides with config / hardcoded defaults."""
     data_path = data_path or (PROCESSED_DIR / "merged_cleaned.csv")
     output_path = output_path or OUTPUT_PATH
-    variance_threshold = variance_threshold if variance_threshold is not None \
+    variance_threshold = (
+        variance_threshold
+        if variance_threshold is not None
         else cfg.get("variance_threshold", 0.01)
-    correlation_threshold = correlation_threshold if correlation_threshold is not None \
+    )
+    correlation_threshold = (
+        correlation_threshold
+        if correlation_threshold is not None
         else cfg.get("correlation_threshold", 0.95)
+    )
     kbest_k = kbest_k if kbest_k is not None else cfg.get("kbest_k", 40)
     tree_top_n = tree_top_n if tree_top_n is not None else cfg.get("tree_top_n", 40)
-    return data_path, output_path, variance_threshold, correlation_threshold, kbest_k, tree_top_n
+    return (
+        data_path,
+        output_path,
+        variance_threshold,
+        correlation_threshold,
+        kbest_k,
+        tree_top_n,
+    )
 
 
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -123,17 +141,19 @@ def _clean_features(x: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     logger.info("Feature matrix shape: %s", x.shape)
     non_numeric = x.select_dtypes(exclude=[np.number]).columns.tolist()
     if non_numeric:
-        logger.warning("Dropping %d non-numeric columns: %s", len(non_numeric), non_numeric)
+        logger.warning(
+            "Dropping %d non-numeric columns: %s", len(non_numeric), non_numeric
+        )
         x = x.drop(columns=non_numeric)
     x = x.replace([np.inf, -np.inf], np.nan)
     x = x.fillna(x.median(numeric_only=True))
     return x, initial_features
 
 
-
 # ------------------------------------------------------------------
 # Step 1 — Variance Threshold
 # ------------------------------------------------------------------
+
 
 def apply_variance_threshold(
     X: pd.DataFrame,
@@ -162,7 +182,10 @@ def apply_variance_threshold(
     dropped = before - x_out.shape[1]
     logger.info(
         "Variance Threshold (th=%.4f): %d → %d features  (dropped %d)",
-        threshold, before, x_out.shape[1], dropped,
+        threshold,
+        before,
+        x_out.shape[1],
+        dropped,
     )
     return x_out
 
@@ -170,6 +193,7 @@ def apply_variance_threshold(
 # ------------------------------------------------------------------
 # Step 2 — Correlation Filter
 # ------------------------------------------------------------------
+
 
 def apply_correlation_filter(
     X: pd.DataFrame,
@@ -193,14 +217,15 @@ def apply_correlation_filter(
     """
     before = X.shape[1]
     corr_matrix = X.corr().abs()
-    upper = corr_matrix.where(
-        np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
-    )
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
     to_drop = [col for col in upper.columns if any(upper[col] >= threshold)]
     x_out = X.drop(columns=to_drop)
     logger.info(
         "Correlation Filter (th=%.2f): %d → %d features  (dropped %d)",
-        threshold, before, x_out.shape[1], before - x_out.shape[1],
+        threshold,
+        before,
+        x_out.shape[1],
+        before - x_out.shape[1],
     )
     return x_out
 
@@ -208,6 +233,7 @@ def apply_correlation_filter(
 # ------------------------------------------------------------------
 # Step 3 — SelectKBest (ANOVA-F vs binary label)
 # ------------------------------------------------------------------
+
 
 def apply_select_k_best(
     X: pd.DataFrame,
@@ -240,7 +266,9 @@ def apply_select_k_best(
     x_out = X.loc[:, mask]
     logger.info(
         "SelectKBest (k=%d): %d → %d features",
-        k, before, x_out.shape[1],
+        k,
+        before,
+        x_out.shape[1],
     )
     return x_out, scores
 
@@ -248,6 +276,7 @@ def apply_select_k_best(
 # ------------------------------------------------------------------
 # Step 4 — Tree-Based Feature Importance
 # ------------------------------------------------------------------
+
 
 def apply_tree_importance(
     X: pd.DataFrame,
@@ -284,11 +313,16 @@ def apply_tree_importance(
     # Stratified sample to keep wall-clock time manageable
     MAX_ROWS = 200_000
     if len(X) > MAX_ROWS:
-        sample_idx = (
-            pd.concat([y_binary[y_binary == 0].sample(MAX_ROWS // 2, random_state=random_state),
-                       y_binary[y_binary == 1].sample(MAX_ROWS // 2, random_state=random_state)])
-            .index
-        )
+        sample_idx = pd.concat(
+            [
+                y_binary[y_binary == 0].sample(
+                    MAX_ROWS // 2, random_state=random_state
+                ),
+                y_binary[y_binary == 1].sample(
+                    MAX_ROWS // 2, random_state=random_state
+                ),
+            ]
+        ).index
         x_sample = X.loc[sample_idx]
         y_sample = y_binary.loc[sample_idx]
     else:
@@ -315,7 +349,9 @@ def apply_tree_importance(
     rf.fit(x_sample, y_sample)
 
     importances = (et.feature_importances_ + rf.feature_importances_) / 2.0
-    importance_series = pd.Series(importances, index=X.columns).sort_values(ascending=False)
+    importance_series = pd.Series(importances, index=X.columns).sort_values(
+        ascending=False
+    )
 
     top_features = importance_series.head(top_n).index.tolist()
     importance_dict = importance_series.head(top_n).to_dict()
@@ -323,7 +359,9 @@ def apply_tree_importance(
     x_out = X[top_features]
     logger.info(
         "Tree Importance (top_n=%d): %d → %d features",
-        top_n, before, x_out.shape[1],
+        top_n,
+        before,
+        x_out.shape[1],
     )
     return x_out, importance_dict
 
@@ -331,6 +369,7 @@ def apply_tree_importance(
 # ------------------------------------------------------------------
 # Orchestrator
 # ------------------------------------------------------------------
+
 
 def run_feature_selection(
     data_path: Optional[Path] = None,
@@ -347,7 +386,7 @@ def run_feature_selection(
 
     Loads ``merged_cleaned.csv`` (or *data_path*), runs all four selection
     steps in sequence, and writes ``selected_features.json`` to
-    ``data/processed/``.
+    ``configs/``.
 
     Parameters
     ----------
@@ -376,11 +415,22 @@ def run_feature_selection(
 
     t0 = time.time()
     cfg = _load_config()
-    data_path, output_path, variance_threshold, correlation_threshold, kbest_k, tree_top_n = \
-        _resolve_params(
-            cfg, data_path, output_path,
-            variance_threshold, correlation_threshold, kbest_k, tree_top_n,
-        )
+    (
+        data_path,
+        output_path,
+        variance_threshold,
+        correlation_threshold,
+        kbest_k,
+        tree_top_n,
+    ) = _resolve_params(
+        cfg,
+        data_path,
+        output_path,
+        variance_threshold,
+        correlation_threshold,
+        kbest_k,
+        tree_top_n,
+    )
 
     # ---- load & validate data -------------------------------------------
     logger.info("Loading dataset from: %s", data_path)
@@ -403,14 +453,16 @@ def run_feature_selection(
         logger.info("Using %d-row sample for correlation computation…", sample_for_corr)
         x_corr_sample = x_full.sample(sample_for_corr, random_state=random_state)
         corr_matrix = x_corr_sample.corr().abs()
-        upper = corr_matrix.where(
-            np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
-        )
-        to_drop = [col for col in upper.columns if any(upper[col] >= correlation_threshold)]
+        upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+        to_drop = [
+            col for col in upper.columns if any(upper[col] >= correlation_threshold)
+        ]
         x_full = x_full.drop(columns=to_drop)
         logger.info(
             "Correlation Filter (th=%.2f): dropped %d features → %d remaining",
-            correlation_threshold, len(to_drop), x_full.shape[1],
+            correlation_threshold,
+            len(to_drop),
+            x_full.shape[1],
         )
     else:
         x_full = apply_correlation_filter(x_full, threshold=correlation_threshold)
@@ -428,7 +480,9 @@ def run_feature_selection(
 
     logger.info(
         "Feature selection complete: %d → %d features in %.1fs",
-        initial_features, len(selected_features), elapsed,
+        initial_features,
+        len(selected_features),
+        elapsed,
     )
 
     # ---- Save results ---------------------------------------------------
@@ -465,6 +519,7 @@ def run_feature_selection(
 # Loader utility (used at inference / training time)
 # ------------------------------------------------------------------
 
+
 def load_selected_features(path: Optional[Path] = None) -> list[str]:
     """
     Load the previously saved feature list from *selected_features.json*.
@@ -487,8 +542,7 @@ def load_selected_features(path: Optional[Path] = None) -> list[str]:
     path = path or OUTPUT_PATH
     if not path.exists():
         raise FileNotFoundError(
-            f"Feature list not found at '{path}'.  "
-            "Run `run_feature_selection()` first."
+            f"Feature list not found at '{path}'.  Run `run_feature_selection()` first."
         )
     with open(path, "r") as fh:
         data = json.load(fh)
@@ -507,10 +561,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="CyberSentinel-AI — Feature Selection (Stage 1)"
     )
-    parser.add_argument("--data", type=Path, default=None,
-                        help="Path to merged_cleaned.csv  [default: data/processed/merged_cleaned.csv]")
-    parser.add_argument("--output", type=Path, default=None,
-                        help="Output JSON path  [default: data/processed/selected_features.json]")
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=None,
+        help="Path to merged_cleaned.csv  [default: data/processed/merged_cleaned.csv]",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output JSON path  [default: configs/selected_features.json]",
+    )
     parser.add_argument("--variance-threshold", type=float, default=None)
     parser.add_argument("--correlation-threshold", type=float, default=None)
     parser.add_argument("--kbest-k", type=int, default=None)

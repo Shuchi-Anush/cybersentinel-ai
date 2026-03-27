@@ -15,7 +15,7 @@ Pipeline:
     4. Apply class_weight='balanced' (multi-class SMOTE-NC is slow; optional)
     5. Train a RandomForest with per-class balanced weighting
     6. Evaluate on val set → macro/weighted F1, per-class report
-    7. Save model.pkl + label_encoder.pkl to models/multiclass/
+    7. Save model.pkl + label_encoder.pkl to MODELS_DIR / "multiclass"
     8. Save metadata.json with metrics, classes, and feature list
 
 Design note:
@@ -24,7 +24,7 @@ Design note:
                         binary=1 → run multi-class → get attack type
 
 Outputs:
-    models/multiclass/
+    MODELS_DIR / "multiclass"
         model.pkl
         label_encoder.pkl
         metadata.json
@@ -40,7 +40,6 @@ from pathlib import Path
 from typing import Optional
 
 import joblib
-import numpy as np
 import pandas as pd
 import yaml
 from sklearn.ensemble import RandomForestClassifier
@@ -70,19 +69,21 @@ logger = logging.getLogger("multiclass_trainer")
 # Paths
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELS_DIR = PROJECT_ROOT / "models" / "multiclass"
-CONFIG_PATH = PROJECT_ROOT / "configs" / "training.yaml"
+from src.core.paths import MODELS_DIR, CONFIGS_DIR
+
+MULTICLASS_MODELS_DIR = MODELS_DIR / "multiclass"
+CONFIG_PATH = CONFIGS_DIR / "training.yaml"
 MODEL_FILENAME = "model.pkl"
 ENCODER_FILENAME = "label_encoder.pkl"
-MODEL_PATH = MODELS_DIR / MODEL_FILENAME
-ENCODER_PATH = MODELS_DIR / ENCODER_FILENAME
-METADATA_PATH = MODELS_DIR / "metadata.json"
+MODEL_PATH = MULTICLASS_MODELS_DIR / MODEL_FILENAME
+ENCODER_PATH = MULTICLASS_MODELS_DIR / ENCODER_FILENAME
+METADATA_PATH = MULTICLASS_MODELS_DIR / "metadata.json"
 
 
 # ------------------------------------------------------------------
 # Config
 # ------------------------------------------------------------------
+
 
 def _load_config() -> dict:
     if CONFIG_PATH.exists():
@@ -95,6 +96,7 @@ def _load_config() -> dict:
 # ------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------
+
 
 def _filter_attacks(
     x: pd.DataFrame,
@@ -117,14 +119,17 @@ def _filter_attacks(
     if benign_mask.any():
         logger.warning(
             "[%s] Found %d 'BENIGN' rows under binary==1 — dropping them.",
-            split_name, benign_mask.sum(),
+            split_name,
+            benign_mask.sum(),
         )
         x_attacks = x_attacks[~benign_mask].reset_index(drop=True)
         y_attacks = y_attacks[~benign_mask].reset_index(drop=True)
 
     logger.info(
         "[%s] Attack rows: %d  |  Unique attack types: %d",
-        split_name, len(x_attacks), y_attacks.nunique(),
+        split_name,
+        len(x_attacks),
+        y_attacks.nunique(),
     )
     return x_attacks, y_attacks
 
@@ -148,13 +153,14 @@ def _apply_smote_multiclass(
         min_count = y_train.value_counts().min()
         k_neighbors = max(1, min(5, min_count - 1))
 
-        smote = SMOTE(random_state=random_state, k_neighbors=k_neighbors, n_jobs=-1)
+        smote = SMOTE(random_state=random_state, k_neighbors=k_neighbors)
         x_res, y_res = smote.fit_resample(x_train, y_train)
         x_res = pd.DataFrame(x_res, columns=x_train.columns)
         y_res = pd.Series(y_res, name=y_train.name)
         logger.info(
             "SMOTE applied — train size: %d → %d",
-            len(x_train), len(x_res),
+            len(x_train),
+            len(x_res),
         )
         return x_res, y_res
     except ImportError:
@@ -182,7 +188,8 @@ def _evaluate_multiclass(
     # Human-readable class names for the report
     class_names = encoder.classes_.tolist()
     report = classification_report(
-        y_encoded, y_pred,
+        y_encoded,
+        y_pred,
         labels=list(range(len(class_names))),
         target_names=class_names,
         output_dict=True,
@@ -200,10 +207,14 @@ def _evaluate_multiclass(
             float(f1_score(y_encoded, y_pred, average="macro", zero_division=0)), 6
         ),
         "precision_weighted": round(
-            float(precision_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6
+            float(
+                precision_score(y_encoded, y_pred, average="weighted", zero_division=0)
+            ),
+            6,
         ),
         "recall_weighted": round(
-            float(recall_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6
+            float(recall_score(y_encoded, y_pred, average="weighted", zero_division=0)),
+            6,
         ),
         "confusion_matrix": cm,
         "classification_report": report,
@@ -222,6 +233,7 @@ def _evaluate_multiclass(
 # ------------------------------------------------------------------
 # Public trainer
 # ------------------------------------------------------------------
+
 
 def train_multiclass_classifier(
     use_smote: Optional[bool] = None,
@@ -257,7 +269,7 @@ def train_multiclass_classifier(
     n_jobs : int
         Parallelism (-1 = all cores).
     model_dir : Path, optional
-        Override save directory (default models/multiclass/).
+        Override save directory (default MODELS_DIR / "multiclass").
 
     Returns
     -------
@@ -268,14 +280,23 @@ def train_multiclass_classifier(
     cfg = _load_config()
 
     # Resolve params (caller > config > default)
-    use_smote = use_smote if use_smote is not None else cfg.get("use_smote", True)
-    n_estimators = n_estimators if n_estimators is not None else cfg.get("n_estimators", 300)
+    use_smote = False  # Hard disabled for multiclass per final audit
+    n_estimators = (
+        n_estimators if n_estimators is not None else cfg.get("n_estimators", 300)
+    )
     max_depth = max_depth if max_depth is not None else cfg.get("max_depth", None)
-    min_samples_leaf = min_samples_leaf if min_samples_leaf is not None \
+    min_samples_leaf = (
+        min_samples_leaf
+        if min_samples_leaf is not None
         else cfg.get("min_samples_leaf", 4)
-    max_features = max_features if max_features is not None else cfg.get("max_features", "sqrt")
-    random_state = random_state if random_state is not None else cfg.get("random_state", 42)
-    model_dir = model_dir or MODELS_DIR
+    )
+    max_features = (
+        max_features if max_features is not None else cfg.get("max_features", "sqrt")
+    )
+    random_state = (
+        random_state if random_state is not None else cfg.get("random_state", 42)
+    )
+    model_dir = model_dir or MULTICLASS_MODELS_DIR
     model_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- load Stage 2 splits ------------------------------------------
@@ -287,7 +308,9 @@ def train_multiclass_classifier(
     feature_names = x_train_full.columns.tolist()
 
     # ---- filter to attack rows only -----------------------------------
-    x_train, y_train_raw = _filter_attacks(x_train_full, y_train_binary, y_train_label, "train")
+    x_train, y_train_raw = _filter_attacks(
+        x_train_full, y_train_binary, y_train_label, "train"
+    )
     x_val, y_val_raw = _filter_attacks(x_val_full, y_val_binary, y_val_label, "val")
 
     if len(x_train) == 0:
@@ -298,7 +321,9 @@ def train_multiclass_classifier(
 
     logger.info(
         "Train attack rows: %d  |  Val attack rows: %d  |  Features: %d",
-        len(x_train), len(x_val), len(feature_names),
+        len(x_train),
+        len(x_val),
+        len(feature_names),
     )
 
     # ---- encode labels ------------------------------------------------
@@ -327,13 +352,9 @@ def train_multiclass_classifier(
 
     logger.info("Train class distribution:\n%s", y_train_raw.value_counts().to_string())
 
-    # ---- class-imbalance handling ------------------------------------
-    if use_smote:
-        x_train, y_train_enc = _apply_smote_multiclass(x_train, y_train_enc, random_state)
-        class_weight_param = None
-    else:
-        class_weight_param = "balanced"
-        logger.info("Using class_weight='balanced' instead of SMOTE.")
+    # SMOTE explicitly disabled for multiclass; using balanced_subsample to avoid warping sparse classes
+    class_weight_param = "balanced_subsample"
+    logger.info("Using class_weight='balanced_subsample' to preserve explicit network geometries.")
 
     # ---- build and train model ----------------------------------------
     model = RandomForestClassifier(
@@ -350,8 +371,11 @@ def train_multiclass_classifier(
     logger.info(
         "Training RandomForest (multi-class) — n_estimators=%d  max_depth=%s  "
         "min_samples_leaf=%d  max_features=%s  class_weight=%s",
-        n_estimators, max_depth, min_samples_leaf, max_features,
-        class_weight_param if not use_smote else "none (SMOTE used)",
+        n_estimators,
+        max_depth,
+        min_samples_leaf,
+        max_features,
+        class_weight_param,
     )
 
     model.fit(x_train, y_train_enc)
@@ -370,10 +394,9 @@ def train_multiclass_classifier(
     logger.info("Saved encoder → %s", encoder_path)
 
     # ---- feature importance -------------------------------------------
-    importance_series = (
-        pd.Series(model.feature_importances_, index=feature_names)
-        .sort_values(ascending=False)
-    )
+    importance_series = pd.Series(
+        model.feature_importances_, index=feature_names
+    ).sort_values(ascending=False)
     top_20_importances = importance_series.head(20).to_dict()
 
     # ---- save metadata ------------------------------------------------
@@ -439,6 +462,7 @@ def train_multiclass_classifier(
 # Loaders (used by inference pipeline)
 # ------------------------------------------------------------------
 
+
 def load_multiclass_model(
     model_dir: Optional[Path] = None,
 ) -> tuple[RandomForestClassifier, LabelEncoder]:
@@ -449,13 +473,13 @@ def load_multiclass_model(
     ----------
     model_dir : Path, optional
         Directory containing model.pkl and label_encoder.pkl.
-        Defaults to models/multiclass/.
+        Defaults to MODELS_DIR / "multiclass".
 
     Returns
     -------
     tuple[RandomForestClassifier, LabelEncoder]
     """
-    model_dir = model_dir or MODELS_DIR
+    model_dir = model_dir or MULTICLASS_MODELS_DIR
     model_path = model_dir / MODEL_FILENAME
     encoder_path = model_dir / ENCODER_FILENAME
 
@@ -482,8 +506,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="CyberSentinel-AI — Multi-class Classifier Training (Stage 4)"
     )
-    parser.add_argument("--no-smote", action="store_true",
-                        help="Disable SMOTE; use class_weight='balanced' instead")
+    parser.add_argument(
+        "--no-smote",
+        action="store_true",
+        help="Disable SMOTE; use class_weight='balanced' instead",
+    )
     parser.add_argument("--n-estimators", type=int, default=None)
     parser.add_argument("--max-depth", type=int, default=None)
     parser.add_argument("--min-samples-leaf", type=int, default=None)

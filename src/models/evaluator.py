@@ -8,7 +8,7 @@ Author: CyberSentinel ML-LAB
 Computes and saves comprehensive evaluation reports for both the binary
 classifier and the multi-class attack-type classifier.
 
-Outputs per model (saved to models/eval/binary/ and models/eval/multiclass/):
+Outputs per model (saved to EVAL_DIR / "binary" and EVAL_DIR / "multiclass"):
     metrics.json          — all scalar metrics (accuracy, F1, ROC-AUC, etc.)
     classification_report.json
     confusion_matrix.png
@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib
+
 matplotlib.use("Agg")  # non-interactive backend; safe in all environments
 import matplotlib.pyplot as plt
 import numpy as np
@@ -64,8 +65,9 @@ logger = logging.getLogger("evaluator")
 # Paths
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-EVAL_ROOT = PROJECT_ROOT / "models" / "eval"
+from src.core.paths import EVAL_DIR
+
+EVAL_ROOT = EVAL_DIR
 BINARY_EVAL_DIR = EVAL_ROOT / "binary"
 MULTICLASS_EVAL_DIR = EVAL_ROOT / "multiclass"
 
@@ -73,22 +75,25 @@ MULTICLASS_EVAL_DIR = EVAL_ROOT / "multiclass"
 # Plot style
 # ------------------------------------------------------------------
 
-plt.rcParams.update({
-    "figure.dpi": 150,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.titlesize": 13,
-    "axes.labelsize": 11,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "legend.fontsize": 9,
-})
+plt.rcParams.update(
+    {
+        "figure.dpi": 150,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.titlesize": 13,
+        "axes.labelsize": 11,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 9,
+    }
+)
 CMAP = "Blues"
 
 
 # ==================================================================
 # Binary Evaluation
 # ==================================================================
+
 
 def _plot_confusion_matrix_binary(cm: np.ndarray, out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(5, 4))
@@ -102,8 +107,15 @@ def _plot_confusion_matrix_binary(cm: np.ndarray, out_dir: Path) -> None:
     thresh = cm.max() / 2.0
     for i in range(2):
         for j in range(2):
-            ax.text(j, i, f"{cm[i, j]:,}", ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black", fontsize=11)
+            ax.text(
+                j,
+                i,
+                f"{cm[i, j]:,}",
+                ha="center",
+                va="center",
+                color="white" if cm[i, j] > thresh else "black",
+                fontsize=11,
+            )
     ax.set_title("Binary Classifier — Confusion Matrix (Test Set)")
     ax.set_ylabel("Actual")
     ax.set_xlabel("Predicted")
@@ -154,8 +166,8 @@ def evaluate_binary(
     """
     Evaluate the binary classifier on the specified split.
 
-    Loads the saved model from models/binary/ and the split from
-    data/processed/.  Saves plots and metrics to models/eval/binary/.
+    Loads the saved model from MODELS_DIR / "binary" and the split from
+    DATA_DIR / "processed".  Saves plots and metrics to EVAL_DIR / "binary".
 
     Parameters
     ----------
@@ -181,7 +193,9 @@ def evaluate_binary(
     y_proba = model.predict_proba(x)[:, 1]
 
     # ---- scalar metrics ------------------------------------------------
-    report_dict = classification_report(y_binary, y_pred, output_dict=True, zero_division=0)
+    report_dict = classification_report(
+        y_binary, y_pred, output_dict=True, zero_division=0
+    )
     cm = confusion_matrix(y_binary, y_pred)
 
     roc_auc = _plot_roc_binary(y_binary, y_proba, out_dir)
@@ -192,10 +206,22 @@ def evaluate_binary(
         "task": "binary_classification",
         "split": split,
         "accuracy": round(float(report_dict["accuracy"]), 6),
-        "f1_weighted": round(float(f1_score(y_binary, y_pred, average="weighted", zero_division=0)), 6),
-        "f1_macro": round(float(f1_score(y_binary, y_pred, average="macro", zero_division=0)), 6),
-        "precision_weighted": round(float(precision_score(y_binary, y_pred, average="weighted", zero_division=0)), 6),
-        "recall_weighted": round(float(recall_score(y_binary, y_pred, average="weighted", zero_division=0)), 6),
+        "f1_weighted": round(
+            float(f1_score(y_binary, y_pred, average="weighted", zero_division=0)), 6
+        ),
+        "f1_macro": round(
+            float(f1_score(y_binary, y_pred, average="macro", zero_division=0)), 6
+        ),
+        "precision_weighted": round(
+            float(
+                precision_score(y_binary, y_pred, average="weighted", zero_division=0)
+            ),
+            6,
+        ),
+        "recall_weighted": round(
+            float(recall_score(y_binary, y_pred, average="weighted", zero_division=0)),
+            6,
+        ),
         "roc_auc": round(roc_auc, 6),
         "average_precision": round(avg_prec, 6),
         "confusion_matrix": cm.tolist(),
@@ -210,8 +236,11 @@ def evaluate_binary(
 
     logger.info(
         "[BINARY %s] Accuracy=%.4f  F1(w)=%.4f  ROC-AUC=%.4f  AP=%.4f",
-        split.upper(), metrics["accuracy"], metrics["f1_weighted"],
-        metrics["roc_auc"], metrics["average_precision"],
+        split.upper(),
+        metrics["accuracy"],
+        metrics["f1_weighted"],
+        metrics["roc_auc"],
+        metrics["average_precision"],
     )
     return metrics
 
@@ -219,6 +248,7 @@ def evaluate_binary(
 # ==================================================================
 # Multi-class Evaluation
 # ==================================================================
+
 
 def _plot_confusion_matrix_multiclass(
     cm: np.ndarray, class_names: list[str], out_dir: Path
@@ -235,8 +265,15 @@ def _plot_confusion_matrix_multiclass(
     thresh = cm.max() / 2.0
     for i in range(n):
         for j in range(n):
-            ax.text(j, i, str(cm[i, j]), ha="center", va="center", fontsize=7,
-                    color="white" if cm[i, j] > thresh else "black")
+            ax.text(
+                j,
+                i,
+                str(cm[i, j]),
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="white" if cm[i, j] > thresh else "black",
+            )
     ax.set_title("Multi-class Classifier — Confusion Matrix (Test Set)")
     ax.set_ylabel("Actual")
     ax.set_xlabel("Predicted")
@@ -246,8 +283,10 @@ def _plot_confusion_matrix_multiclass(
 
 
 def _plot_roc_ova(
-    y_bin: np.ndarray, y_proba: np.ndarray,
-    class_names: list[str], out_dir: Path,
+    y_bin: np.ndarray,
+    y_proba: np.ndarray,
+    class_names: list[str],
+    out_dir: Path,
 ) -> dict[str, float]:
     """One-vs-All ROC curves, one per attack class."""
     n_classes = len(class_names)
@@ -261,8 +300,9 @@ def _plot_roc_ova(
         fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
         roc_auc = auc(fpr, tpr)
         aucs[cls_name] = round(roc_auc, 6)
-        ax.plot(fpr, tpr, color=colour, lw=1.5,
-                label=f"{cls_name[:20]} ({roc_auc:.3f})")
+        ax.plot(
+            fpr, tpr, color=colour, lw=1.5, label=f"{cls_name[:20]} ({roc_auc:.3f})"
+        )
 
     ax.plot([0, 1], [0, 1], "k--", lw=1, alpha=0.4)
     ax.set_xlim([0.0, 1.0])
@@ -278,8 +318,10 @@ def _plot_roc_ova(
 
 
 def _plot_pr_ova(
-    y_bin: np.ndarray, y_proba: np.ndarray,
-    class_names: list[str], out_dir: Path,
+    y_bin: np.ndarray,
+    y_proba: np.ndarray,
+    class_names: list[str],
+    out_dir: Path,
 ) -> dict[str, float]:
     """One-vs-All PR curves, one per attack class."""
     n_classes = len(class_names)
@@ -293,8 +335,7 @@ def _plot_pr_ova(
         prec, rec, _ = precision_recall_curve(y_bin[:, i], y_proba[:, i])
         ap = average_precision_score(y_bin[:, i], y_proba[:, i])
         avg_precs[cls_name] = round(ap, 6)
-        ax.plot(rec, prec, color=colour, lw=1.5,
-                label=f"{cls_name[:20]} (AP={ap:.3f})")
+        ax.plot(rec, prec, color=colour, lw=1.5, label=f"{cls_name[:20]} (AP={ap:.3f})")
 
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
@@ -316,7 +357,7 @@ def evaluate_multiclass(
     Evaluate the multi-class attack classifier on the specified split.
 
     Only attack rows (binary == 1) are evaluated — matching how the model
-    was trained.  Saves plots and metrics to models/eval/multiclass/.
+    was trained.  Saves plots and metrics to EVAL_DIR / "multiclass".
 
     Parameters
     ----------
@@ -334,7 +375,9 @@ def evaluate_multiclass(
     out_dir = out_dir or MULTICLASS_EVAL_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Evaluating multi-class classifier on '%s' split (attack rows only)…", split)
+    logger.info(
+        "Evaluating multi-class classifier on '%s' split (attack rows only)…", split
+    )
 
     x_full, y_binary, y_label = load_splits(split)
     model, encoder = load_multiclass_model()
@@ -361,7 +404,8 @@ def evaluate_multiclass(
 
     # ---- per-class report --------------------------------------------
     report_dict = classification_report(
-        y_encoded, y_pred,
+        y_encoded,
+        y_pred,
         labels=list(range(len(class_names))),
         target_names=class_names,
         output_dict=True,
@@ -385,10 +429,16 @@ def evaluate_multiclass(
     # ---- macro/weighted ROC-AUC -------------------------------------
     try:
         roc_auc_macro = round(
-            float(roc_auc_score(y_encoded, y_proba, multi_class="ovr", average="macro")), 6
+            float(
+                roc_auc_score(y_encoded, y_proba, multi_class="ovr", average="macro")
+            ),
+            6,
         )
         roc_auc_weighted = round(
-            float(roc_auc_score(y_encoded, y_proba, multi_class="ovr", average="weighted")), 6
+            float(
+                roc_auc_score(y_encoded, y_proba, multi_class="ovr", average="weighted")
+            ),
+            6,
         )
     except ValueError:
         roc_auc_macro = roc_auc_weighted = None
@@ -401,10 +451,22 @@ def evaluate_multiclass(
         "eval_rows": int(len(x_attacks)),
         "unseen_rows_excluded": int(unseen),
         "accuracy": round(float(report_dict["accuracy"]), 6),
-        "f1_weighted": round(float(f1_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6),
-        "f1_macro": round(float(f1_score(y_encoded, y_pred, average="macro", zero_division=0)), 6),
-        "precision_weighted": round(float(precision_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6),
-        "recall_weighted": round(float(recall_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6),
+        "f1_weighted": round(
+            float(f1_score(y_encoded, y_pred, average="weighted", zero_division=0)), 6
+        ),
+        "f1_macro": round(
+            float(f1_score(y_encoded, y_pred, average="macro", zero_division=0)), 6
+        ),
+        "precision_weighted": round(
+            float(
+                precision_score(y_encoded, y_pred, average="weighted", zero_division=0)
+            ),
+            6,
+        ),
+        "recall_weighted": round(
+            float(recall_score(y_encoded, y_pred, average="weighted", zero_division=0)),
+            6,
+        ),
         "roc_auc_macro": roc_auc_macro,
         "roc_auc_weighted": roc_auc_weighted,
         "roc_auc_per_class": roc_aucs_per_class,
@@ -420,8 +482,11 @@ def evaluate_multiclass(
 
     logger.info(
         "[MULTICLASS %s] Accuracy=%.4f  F1(w)=%.4f  F1(macro)=%.4f  ROC-AUC(macro)=%s",
-        split.upper(), metrics["accuracy"], metrics["f1_weighted"],
-        metrics["f1_macro"], metrics["roc_auc_macro"],
+        split.upper(),
+        metrics["accuracy"],
+        metrics["f1_weighted"],
+        metrics["f1_macro"],
+        metrics["roc_auc_macro"],
     )
     return metrics
 
@@ -429,6 +494,7 @@ def evaluate_multiclass(
 # ==================================================================
 # Orchestrator — evaluate both models
 # ==================================================================
+
 
 def run_evaluation(
     split: str = "test",
@@ -495,7 +561,7 @@ def _print_summary(binary: dict, multiclass: dict, elapsed: float) -> None:
     print(f"    F1 (macro)     : {multiclass['f1_macro']:.4f}")
     roc = multiclass["roc_auc_macro"]
     print(f"    ROC-AUC (macro): {roc:.4f}" if roc else "    ROC-AUC (macro): N/A")
-    print(f"\n  Reports saved to : models/eval/")
+    print(f"\n  Reports saved to : {EVAL_DIR}")
     print(f"  Total elapsed    : {elapsed:.1f}s")
     print("=" * 60)
 
@@ -511,17 +577,19 @@ if __name__ == "__main__":
         description="CyberSentinel-AI — Evaluation (Stage 5)"
     )
     parser.add_argument(
-        "--split", type=str, default="test",
+        "--split",
+        type=str,
+        default="test",
         choices=["train", "val", "test"],
-        help="Which data split to evaluate on (default: test)"
+        help="Which data split to evaluate on (default: test)",
     )
     parser.add_argument(
-        "--binary-only", action="store_true",
-        help="Only evaluate the binary classifier"
+        "--binary-only", action="store_true", help="Only evaluate the binary classifier"
     )
     parser.add_argument(
-        "--multiclass-only", action="store_true",
-        help="Only evaluate the multi-class classifier"
+        "--multiclass-only",
+        action="store_true",
+        help="Only evaluate the multi-class classifier",
     )
     args = parser.parse_args()
 

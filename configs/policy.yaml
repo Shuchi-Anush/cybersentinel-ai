@@ -33,9 +33,9 @@ policy:
   # QUARANTINE — isolate for investigation; lower confidence / impact
   # ----------------------------------------------------------------
   quarantine_classes:
-    - Web Attack – Brute Force
-    - Web Attack – XSS
-    - Web Attack – Sql Injection
+    - Web Attack - Brute Force
+    - Web Attack - XSS
+    - Web Attack - Sql Injection
     - Infiltration
     - Heartbleed
 

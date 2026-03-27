@@ -39,6 +39,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src.features.selector import load_selected_features
+from src.core.paths import CONFIGS_DIR
 
 # ------------------------------------------------------------------
 # Logging
@@ -56,19 +57,20 @@ logger = logging.getLogger("preprocessor")
 # Path configuration
 # ------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
-MODELS_DIR = PROJECT_ROOT / "models"
-CONFIG_PATH = PROJECT_ROOT / "configs" / "training.yaml"
+from src.core.paths import DATA_DIR, MODELS_DIR
+
+PROCESSED_DIR = DATA_DIR / "processed"
+CONFIG_PATH = CONFIGS_DIR / "training.yaml"
 
 SCALER_PATH = MODELS_DIR / "scaler.pkl"
 METADATA_PATH = MODELS_DIR / "preprocessing_metadata.json"
-FEATURES_JSON = PROCESSED_DIR / "selected_features.json"
+FEATURES_JSON = CONFIGS_DIR / "selected_features.json"
 
 
 # ------------------------------------------------------------------
 # Config loader
 # ------------------------------------------------------------------
+
 
 def _load_config() -> dict:
     """Load training section from training.yaml."""
@@ -82,6 +84,7 @@ def _load_config() -> dict:
 # ------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------
+
 
 def _validate_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -125,13 +128,17 @@ def _save_split(
     y_label.to_frame().to_parquet(out_dir / f"y_{name}_label.parquet", index=False)
     logger.info(
         "Saved %s split → X=%s  binary=%s  label=%s",
-        name, x.shape, y_binary.shape, y_label.shape,
+        name,
+        x.shape,
+        y_binary.shape,
+        y_label.shape,
     )
 
 
 # ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
+
 
 def run_preprocessing(
     data_path: Optional[Path] = None,
@@ -156,7 +163,7 @@ def run_preprocessing(
         Path to merged_cleaned.csv.  Defaults to data/processed/merged_cleaned.csv.
     features_path : Path, optional
         Path to selected_features.json from Stage 1.  Defaults to
-        data/processed/selected_features.json.
+        configs/selected_features.json.
     out_dir : Path, optional
         Directory for parquet split files.  Defaults to data/processed/.
     scaler_path : Path, optional
@@ -184,7 +191,9 @@ def run_preprocessing(
     scaler_path = scaler_path or SCALER_PATH
     test_size = test_size if test_size is not None else cfg.get("test_size", 0.15)
     val_size = val_size if val_size is not None else cfg.get("val_size", 0.15)
-    random_state = random_state if random_state is not None else cfg.get("random_state", 42)
+    random_state = (
+        random_state if random_state is not None else cfg.get("random_state", 42)
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -222,28 +231,41 @@ def run_preprocessing(
 
     # ---- stratified split: full → trainval / test --------------------
     # Stratify on binary label
-    x_trainval, x_test, y_binary_trainval, y_binary_test, y_label_trainval, y_label_test = \
-        train_test_split(
-            x, y_binary, y_label,
-            test_size=test_size,
-            stratify=y_binary,
-            random_state=random_state,
-        )
+    (
+        x_trainval,
+        x_test,
+        y_binary_trainval,
+        y_binary_test,
+        y_label_trainval,
+        y_label_test,
+    ) = train_test_split(
+        x,
+        y_binary,
+        y_label,
+        test_size=test_size,
+        stratify=y_binary,
+        random_state=random_state,
+    )
 
     # Proportional val size from trainval pool
     # e.g. 0.15 test, 0.15 val → val fraction of trainval = 0.15/(1-0.15) ≈ 0.176
     val_fraction = val_size / (1.0 - test_size)
-    x_train, x_val, y_binary_train, y_binary_val, y_label_train, y_label_val = \
+    x_train, x_val, y_binary_train, y_binary_val, y_label_train, y_label_val = (
         train_test_split(
-            x_trainval, y_binary_trainval, y_label_trainval,
+            x_trainval,
+            y_binary_trainval,
+            y_label_trainval,
             test_size=val_fraction,
             stratify=y_binary_trainval,
             random_state=random_state,
         )
+    )
 
     logger.info(
         "Split sizes — train: %d  val: %d  test: %d",
-        len(x_train), len(x_val), len(x_test),
+        len(x_train),
+        len(x_val),
+        len(x_test),
     )
 
     # ---- fit scaler on train only -----------------------------------
@@ -272,9 +294,15 @@ def run_preprocessing(
     # ---- save splits ------------------------------------------------
     # Reset index so parquet row numbers are clean
     for frame in (
-        x_train_scaled, x_val_scaled, x_test_scaled,
-        y_binary_train, y_binary_val, y_binary_test,
-        y_label_train, y_label_val, y_label_test,
+        x_train_scaled,
+        x_val_scaled,
+        x_test_scaled,
+        y_binary_train,
+        y_binary_val,
+        y_binary_test,
+        y_label_train,
+        y_label_val,
+        y_label_test,
     ):
         frame.reset_index(drop=True, inplace=True)
 
@@ -309,11 +337,14 @@ def run_preprocessing(
         },
         "elapsed_seconds": round(elapsed, 2),
     }
+
     # Convert int8/int keys to plain int for JSON serialisation
     def _jsonify(obj):
         if isinstance(obj, dict):
-            return {int(k) if isinstance(k, (np.integer,)) else k: _jsonify(v)
-                    for k, v in obj.items()}
+            return {
+                int(k) if isinstance(k, (np.integer,)) else k: _jsonify(v)
+                for k, v in obj.items()
+            }
         return obj
 
     with open(METADATA_PATH, "w") as fh:
@@ -338,6 +369,7 @@ def run_preprocessing(
 # ------------------------------------------------------------------
 # Loader utilities (used at training / inference time)
 # ------------------------------------------------------------------
+
 
 def load_splits(
     split: str = "train",
@@ -384,8 +416,7 @@ def load_scaler(path: Optional[Path] = None) -> StandardScaler:
     path = path or SCALER_PATH
     if not path.exists():
         raise FileNotFoundError(
-            f"Scaler not found at '{path}'. "
-            "Run `run_preprocessing()` first."
+            f"Scaler not found at '{path}'. Run `run_preprocessing()` first."
         )
     scaler = joblib.load(path)
     logger.info("Loaded scaler from: %s", path)
@@ -402,12 +433,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="CyberSentinel-AI — Preprocessing (Stage 2)"
     )
-    parser.add_argument("--data", type=Path, default=None,
-                        help="Path to merged_cleaned.csv")
-    parser.add_argument("--features", type=Path, default=None,
-                        help="Path to selected_features.json from Stage 1")
-    parser.add_argument("--out-dir", type=Path, default=None,
-                        help="Output directory for parquet splits")
+    parser.add_argument(
+        "--data", type=Path, default=None, help="Path to merged_cleaned.csv"
+    )
+    parser.add_argument(
+        "--features",
+        type=Path,
+        default=None,
+        help="Path to selected_features.json from Stage 1",
+    )
+    parser.add_argument(
+        "--out-dir", type=Path, default=None, help="Output directory for parquet splits"
+    )
     parser.add_argument("--test-size", type=float, default=None)
     parser.add_argument("--val-size", type=float, default=None)
     parser.add_argument("--random-state", type=int, default=None)
