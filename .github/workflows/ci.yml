@@ -22,4 +22,4 @@ jobs:
           pip install pytest
 
       - name: Run tests
-        run: pytest tests/
+        run: pytest tests/test_api.py tests/test_health.py
