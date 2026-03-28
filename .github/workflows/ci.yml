@@ -20,6 +20,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements_min.txt
           pip install pytest
-
       - name: Run tests
-        run: pytest tests/test_api.py tests/test_health.py
+        run: |
+          pytest tests/test_api.py -v
+          pytest tests/test_health.py -v
