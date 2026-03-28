@@ -540,6 +540,22 @@ def run_evaluation(
     with open(eval_root / "summary.json", "w") as fh:
         json.dump(combined, fh, indent=2)
 
+    # ---- artifacts/metrics.json (consistent production persistence) ----
+    from src.core.paths import ARTIFACTS_DIR
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    production_metrics = {
+        "binary": {
+            "accuracy": binary_metrics["accuracy"],
+            "f1": binary_metrics["f1_weighted"],
+        },
+        "multiclass": {
+            "accuracy": multiclass_metrics["accuracy"],
+            "f1_macro": multiclass_metrics["f1_macro"],
+        },
+    }
+    with open(ARTIFACTS_DIR / "metrics.json", "w") as fh:
+        json.dump(production_metrics, fh, indent=2)
+
     _print_summary(binary_metrics, multiclass_metrics, elapsed)
     return combined
 

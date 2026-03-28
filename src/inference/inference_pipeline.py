@@ -251,9 +251,7 @@ class InferencePipeline:
             attack_probas=attack_probas,
         )
 
-        # Structured logging step 8
-        for d in decisions:
-            logger.info(f"Action={d.action.value} | Trust={d.confidence:.4f} | Attack={d.attack_type}")
+        # Structured logging step 8 (REMOVED: PER-ROW LOGGING TO REDUCE NOISE)
 
         elapsed = time.time() - t0
         logger.info(

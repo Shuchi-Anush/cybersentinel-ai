@@ -2,8 +2,8 @@
 FROM python:3.10.11-slim AS builder
 
 WORKDIR /build
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir --no-warn-script-location -r requirements.txt
+COPY requirements_min.txt .
+RUN pip install --user --no-cache-dir --no-warn-script-location -r requirements_min.txt
 
 # Stage 2: Hardened Runtime
 FROM python:3.10.11-slim AS runner
