@@ -84,4 +84,5 @@ Thumbs.db
 ruff_errors.json
 ruff_errors2.json
 
-*.tmp
+*.tmp*.json
+!configs/*.json
