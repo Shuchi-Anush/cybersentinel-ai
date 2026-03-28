@@ -1,12 +1,17 @@
-import os
 import pytest
+from pathlib import Path
 
-# 🚨 CRITICAL: skip BEFORE app import
-if not os.path.exists("models"):
-    pytest.skip("Skipping API tests: models not available in CI", allow_module_level=True)
+# 🔥 MUST be before importing app
+if not Path("models/binary/features.pkl").exists():
+    pytest.skip(
+        "Skipping API tests: models not available in CI",
+        allow_module_level=True
+    )
+
+from fastapi.testclient import TestClient
+from src.api.main import app
 
 import joblib
-from pathlib import Path
 from fastapi.testclient import TestClient
 from src.api.main import app
 
