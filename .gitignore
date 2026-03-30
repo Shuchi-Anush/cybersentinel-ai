@@ -77,12 +77,10 @@ Thumbs.db
 *.db
 *.sqlite3
 
-# Local experiments
-*.csv
-
 # Lint / debug
 ruff_errors.json
 ruff_errors2.json
 
-*.tmp*.json
+*.tmp
+*.json
 !configs/*.json

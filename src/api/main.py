@@ -23,25 +23,40 @@ logger = logging.getLogger("api")
 pipeline: InferencePipeline | None = None
 meta_service: MetaService | None = None
 
+PIPELINE_LOADED: bool = False
+META_LOADED: bool = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load heavy ML artifacts and metadata once at startup."""
-    global pipeline, meta_service
+    global pipeline, meta_service, PIPELINE_LOADED, META_LOADED
 
-    logger.info("Loading InferencePipeline at startup…")
-    pipeline = InferencePipeline()
-    logger.info("InferencePipeline ready.")
+    try:
+        logger.info("Loading InferencePipeline at startup…")
+        pipeline = InferencePipeline()
+        PIPELINE_LOADED = True
+        logger.info("InferencePipeline ready.")
+    except Exception as e:
+        logger.error(f"Failed to load InferencePipeline: {e}")
+        PIPELINE_LOADED = False
 
-    logger.info("Loading MetaService at startup…")
-    meta_service = MetaService()
-    logger.info("MetaService ready.")
+    try:
+        logger.info("Loading MetaService at startup…")
+        meta_service = MetaService()
+        META_LOADED = True
+        logger.info("MetaService ready.")
+    except Exception as e:
+        logger.error(f"Failed to load MetaService: {e}")
+        META_LOADED = False
 
     yield
 
     # Shutdown
     pipeline = None
     meta_service = None
+    PIPELINE_LOADED = False
+    META_LOADED = False
 
 
 app = FastAPI(
@@ -65,8 +80,8 @@ def health_check():
     return {
         "status": "ok",
         "service": "CyberSentinel AI API",
-        "pipeline_loaded": pipeline is not None,
-        "meta_loaded": meta_service is not None,
+        "pipeline_loaded": PIPELINE_LOADED,
+        "meta_loaded": META_LOADED,
     }
 
 
