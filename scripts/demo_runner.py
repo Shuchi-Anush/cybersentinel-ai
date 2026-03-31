@@ -21,6 +21,11 @@ def generate_payload(payload_type):
             text=True,
             check=True
         )
+        if not result.stdout.strip():
+            raise RuntimeError("Empty payload output")
+
+        print("RAW PAYLOAD OUTPUT:\n", result.stdout)
+
         return json.loads(result.stdout)
     except subprocess.CalledProcessError as e:
         print(f"❌ Error generating payload: {e.stderr}")

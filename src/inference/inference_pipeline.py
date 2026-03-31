@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import time
+import os
 from pathlib import Path
 from typing import Optional, Union
 
@@ -105,10 +106,14 @@ class InferencePipeline:
         binary_model_dir: Optional[Path] = None,
         multiclass_model_dir: Optional[Path] = None,
         policy_config_path: Optional[Path] = None,
-        binary_threshold: float = 0.5,
+        binary_threshold: float = 0.3,
     ) -> None:
         t0 = time.time()
         logger.info("Loading inference artifacts…")
+
+        # Threshold loaded from environment for production tuning
+        # Default 0.3 ensures consistent behavior with currently trained models
+        self._threshold = float(os.getenv("BINARY_THRESHOLD", binary_threshold))
 
         self._features: list[str] = joblib.load(MODELS_DIR / "binary" / "features.pkl")
         self._scaler = load_scaler(scaler_path)
@@ -122,10 +127,10 @@ class InferencePipeline:
             str(MODELS_DIR / "multiclass" / "multiclass_model.onnx"),
             providers=["CPUExecutionProvider"]
         )
+        # Note: ONNX used for speed, sklearn model used for calibrated probabilities
         self._calibrated_binary = joblib.load(MODELS_DIR / "binary" / "calibrated_binary_model.pkl")
         _, self._encoder = load_multiclass_model(multiclass_model_dir)
         self._policy = PolicyMapper(policy_config_path)
-        self._threshold = float(binary_threshold)
 
         logger.info(
             "InferencePipeline ready — %d features  threshold=%.2f  (%.2fs)",
@@ -199,14 +204,14 @@ class InferencePipeline:
         
         if len(outputs_b) < 2:
             raise RuntimeError("ONNX output malformed")
-            
-        binary_preds = outputs_b[0]
-        _ = outputs_b[1]
-        
-        attack_proba_col = self._calibrated_binary.predict_proba(x_scaled)[:, 1]  # P(attack)
         
         # trust score clamp (safety)
+        # Probabilities calibrated via Scikit-Learn wrapper for reliable trust scores
+        attack_proba_col = self._calibrated_binary.predict_proba(x_scaled)[:, 1]  
+        # P(attack)
         attack_proba_col = np.clip(attack_proba_col, 0.0, 1.0)
+        binary_preds = (attack_proba_col >= self._threshold).astype(int)
+        _ = outputs_b[1]
         
         binary_confidences = np.where(
             binary_preds == 1, attack_proba_col, 1.0 - attack_proba_col
@@ -335,7 +340,7 @@ def _get_default_pipeline() -> InferencePipeline:
 
 def predict(
     df: pd.DataFrame,
-    binary_threshold: float = 0.5,
+    binary_threshold: float = 0.3,
 ) -> list[PolicyDecision]:
     """
     Module-level convenience wrapper: predict on a DataFrame.
@@ -361,7 +366,7 @@ def predict(
 
 def predict_one(
     row: Union[dict, pd.Series],
-    binary_threshold: float = 0.5,
+    binary_threshold: float = 0.3,
 ) -> PolicyDecision:
     """
     Module-level convenience wrapper: predict a single flow.
