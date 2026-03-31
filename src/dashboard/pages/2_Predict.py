@@ -8,6 +8,7 @@ Data sources: GET /meta/features, POST /predict, POST /predict/batch
 
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 from src.dashboard.api_client import get_api
 
 st.header("🔮 Predict")
@@ -15,7 +16,7 @@ st.header("🔮 Predict")
 api = get_api()
 
 if not api.is_reachable():
-    st.error("⚠️ API server is not reachable. Start it first.")
+    st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
 
@@ -85,19 +86,24 @@ with tab_single:
                             key=f"feat_{idx}",
                         )
 
-        submitted = st.form_submit_button("🚀 Predict", use_container_width=True)
+        submitted = st.form_submit_button("🚀 Predict", width="stretch")
 
     if submitted:
+        # GUARD: Zero features check
+        if all(v == 0.0 for v in feature_values.values()):
+            st.warning("⚠️ Please enter at least one non-zero feature value to run a meaningful prediction.")
+            st.stop()
+
         try:
-            with st.spinner("Running inference…"):
+            with st.spinner("🤖 Running CyberSentinel Inference..."):
                 result = api.predict(feature_values)
 
             # --------------------------------------------------
             # SAFE PARSING (match API exactly)
             # --------------------------------------------------
-            binary = result.get("binary_prediction")
+            binary = result.get("binary_prediction", 0)
             confidence = result.get("confidence", 0.0)
-            attack_type = result.get("attack_type")
+            attack_type = result.get("attack_type", "Unknown")
             action = result.get("action", "UNKNOWN")
 
             # --------------------------------------------------
@@ -135,12 +141,15 @@ with tab_single:
 
             if action == "ALLOW":
                 st.success("## 🟢 ALLOW\n**Traffic permitted**")
+                st.success("**THREAT SEVERITY: LOW**")
                 reason = "Binary model classified as benign."
             elif action == "QUARANTINE":
                 st.warning("## 🟡 QUARANTINE\n**Isolate for inspection**")
+                st.warning("**THREAT SEVERITY: MEDIUM**")
                 reason = f"Attack classified as **{attack_label}** → policy applied."
             elif action == "DENY":
                 st.error("## 🔴 DENY\n**Traffic blocked**")
+                st.error("**THREAT SEVERITY: HIGH**")
                 reason = f"Attack classified as **{attack_label}** → policy applied."
             else:
                 st.info(f"## ⚪ {action}")
@@ -148,6 +157,14 @@ with tab_single:
 
             # 3. Decision Explanation
             st.markdown(f"**Reasoning:** {reason}")
+
+            # --------------------------------------------------
+            # HEURISTIC EXPLAINABILITY
+            # --------------------------------------------------
+            st.markdown("##### 🧠 Key Signals (Heuristic)")
+            top_fs = sorted(feature_values.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
+            for f, v in top_fs:
+                st.caption(f"**{f}** → {v:.4f}")
 
             # 4. Raw JSON
             with st.expander("Raw API Response"):
@@ -171,6 +188,11 @@ with tab_batch:
     if uploaded is not None:
         try:
             df_input = pd.read_csv(uploaded)
+            
+            # GUARD: Empty CSV
+            if df_input.empty:
+                st.error("⚠️ The uploaded CSV file is empty. Please provide a valid dataset.")
+                st.stop()
             st.markdown(
                 f"**Loaded:** {len(df_input)} rows × {len(df_input.columns)} columns"
             )
@@ -190,8 +212,8 @@ with tab_batch:
                 df_input[f] = 0.0
             df_input = df_input[feature_names]
 
-            if st.button("🚀 Run Batch Prediction", use_container_width=True):
-                with st.spinner(f"Processing {len(df_input)} flows…"):
+            if st.button("🚀 Run Batch Prediction", width="stretch"):
+                with st.spinner(f"📡 Processing {len(df_input)} flows..."):
                     flows = df_input.to_dict(orient="records")
                     results = api.predict_batch(flows)
 
@@ -216,11 +238,8 @@ with tab_batch:
                         st.metric("🟢 ALLOW", allow_count)
                     with c3:
                         st.metric("🟡 QUARANTINE", quarantine_count)
-                    with c4:
-                        st.metric("🔴 DENY", deny_count)
-
                     # Distribution Chart
-                    st.subheader("🚦 Action Distribution")
+                    st.subheader("🚦 Action Distribution Breakdown")
                     dist_df = pd.DataFrame(
                         [
                             {"Action": "ALLOW", "Count": allow_count},
@@ -228,7 +247,25 @@ with tab_batch:
                             {"Action": "DENY", "Count": deny_count},
                         ]
                     )
-                    st.bar_chart(dist_df.set_index("Action"), use_container_width=True)
+                    st.bar_chart(dist_df.set_index("Action"), width="stretch")
+
+                    # Pie Chart Breakdown
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    labels = ["ALLOW", "QUARANTINE", "DENY"]
+                    sizes = [allow_count, quarantine_count, deny_count]
+                    colors = ["#22C55E", "#EAB308", "#EF4444"]
+                    
+                    # Filter out zero values to avoid empty slices
+                    labels = [label_name for i, label_name in enumerate(labels) if sizes[i] > 0]
+                    colors = [c for i, c in enumerate(colors) if sizes[i] > 0]
+                    sizes = [s for s in sizes if s > 0]
+
+                    if sizes:
+                        ax.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=140)
+                        ax.axis('equal')
+                        st.pyplot(fig)
+                    else:
+                        st.info("No data for pie chart.")
 
                     # Results table
                     st.markdown("#### Tabular Output")
@@ -254,7 +291,7 @@ with tab_batch:
                         data=csv_data,
                         file_name="cybersentinel_predictions.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         except Exception as e:

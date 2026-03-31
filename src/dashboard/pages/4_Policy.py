@@ -7,6 +7,7 @@ Data sources: GET /meta/policy, GET /meta/models (for class list)
 """
 
 import streamlit as st
+import pandas as pd
 from src.dashboard.api_client import get_api
 
 st.header("🛡️ Policy Rules")
@@ -14,13 +15,40 @@ st.header("🛡️ Policy Rules")
 api = get_api()
 
 if not api.is_reachable():
-    st.error("⚠️ API server is not reachable. Start it first.")
+    st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
-policy_data = api.get_policy()
+with st.spinner("🔧 Synchronizing Global Policies..."):
+    policy_data = api.get_policy()
+    models = api.get_models()
+
 deny_list = policy_data.get("deny_classes", [])
 quarantine_list = policy_data.get("quarantine_classes", [])
-default_action = policy_data.get("default_attack_action", "QUARANTINE").upper()
+default_action = str(policy_data.get("default_attack_action", "QUARANTINE")).upper()
+
+# ------------------------------------------------------------------
+# 0. Policy Coverage Summary
+# ------------------------------------------------------------------
+st.subheader("📊 Policy Coverage Summary")
+
+mc_classes = models.get("multiclass", {}).get("attack_classes", [])
+total_classes = len(mc_classes)
+
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.metric("Total Attack Classes", total_classes)
+with c2:
+    st.metric("🔴 Deny (Blocking)", len(deny_list))
+with c3:
+    st.metric("🟡 Quarantine (Isolate)", len(quarantine_list))
+
+# Risk Distribution Chart
+dist_data = pd.DataFrame([
+    {"Action": "DENY", "Count": len(deny_list)},
+    {"Action": "QUARANTINE", "Count": len(quarantine_list)},
+    {"Action": "OTHER (Default)", "Count": max(0, total_classes - len(deny_list) - len(quarantine_list))}
+])
+st.bar_chart(dist_data.set_index("Action"), width="stretch")
 
 # ------------------------------------------------------------------
 # 1. Active Policy Lists
@@ -87,7 +115,6 @@ st.caption(
 )
 
 # Get all known classes for the dropdown
-models = api.get_models()
 mc_classes = models.get("multiclass", {}).get("attack_classes", [])
 binary_classes = list(models.get("binary", {}).get("classes", {}).values())
 
@@ -100,24 +127,38 @@ test_case = st.selectbox(
     help="Select an attack type or benign flow to see the resulting policy action.",
 )
 
+conf = st.slider("Simulated Decision Confidence:", 0.0, 1.0, 0.95)
+st.caption(f"Decision confidence: {conf:.4f}")
+
 st.markdown("**Resulting Action:**")
 
+# --- SIMULATION LOGIC ---
+final_action = "ALLOW"
 if test_case == "Benign (0)":
     st.success("🟢 **ALLOW** — Traffic passes normally.")
-
+    final_action = "ALLOW"
 elif test_case in deny_list:
     st.error("🔴 **DENY** — Matched in deny list. Traffic dropped.")
-
+    final_action = "DENY"
 elif test_case in quarantine_list:
     st.warning("🟡 **QUARANTINE** — Matched in quarantine list. Traffic isolated.")
-
+    final_action = "QUARANTINE"
 else:
-    # Matches the default action
+    final_action = default_action
     if default_action == "DENY":
-        st.error(
-            "🔴 **DENY** — Not explicitly listed. Fallback to default attack action."
-        )
+        st.error("🔴 **DENY** — Not explicitly listed. Fallback to default attack action.")
     else:
-        st.warning(
-            "🟡 **QUARANTINE** — Not explicitly listed. Fallback to default attack action."
-        )
+        st.warning("🟡 **QUARANTINE** — Not explicitly listed. Fallback to default attack action.")
+
+# ------------------------------------------------------------------
+# 4. Strategy Insight Box
+# ------------------------------------------------------------------
+st.divider()
+st.subheader("🧠 Strategy Insights")
+
+if len(deny_list) < 2:
+    st.warning("⚠️ **Limited high-risk coverage:** Very few classes are explicitly blocked. Monitor default actions closely.")
+elif len(quarantine_list) > len(deny_list):
+    st.info("ℹ️ **Conservative Strategy:** Your system prioritizes investigation (quarantine) over immediate blocking. High SOC alert volume expected.")
+else:
+    st.success("🎯 **Aggressive Blocking:** High-risk classes are clearly defined for immediate mitigation.")

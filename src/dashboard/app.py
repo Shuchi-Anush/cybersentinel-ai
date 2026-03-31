@@ -9,7 +9,9 @@ Streamlit entry point.
 Multi-page layout: pages are auto-discovered from src/dashboard/pages/.
 """
 
+import os
 import sys
+import time
 from pathlib import Path
 
 # ✅ MUST come before any src imports
@@ -49,14 +51,41 @@ with st.sidebar:
             f"**Target:** `{api.base_url}`"
         )
 
+    auto_refresh = st.checkbox("🔄 Auto Refresh (10s)", value=False, help="Automatically refresh the dashboard every 10 seconds.")
+    if auto_refresh:
+        time.sleep(10)
+        st.rerun()
+
     st.divider()
     st.caption("© 2026 CyberSentinel ML-LAB")
+    st.caption(f"**Target:** {api.base_url}")
+    st.caption(f"**Env:** {os.environ.get('ENVIRONMENT', 'Production')}")
 
 # ------------------------------------------------------------------
 # Landing page (shown when no sub-page is selected)
 # ------------------------------------------------------------------
 
 st.title("🛡️ CyberSentinel AI Dashboard")
+st.markdown("> **Real-time intrusion detection with policy-driven response**")
+
+# Quick status metrics row (Requirement A)
+api = get_api()
+health = api.health()
+models = api.get_models()
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    status = "🟢 Online" if "error" not in health and health.get("status") == "ok" else "🔴 Offline"
+    st.metric("API Status", status)
+with col2:
+    pipeline = "🟢 Loaded" if health.get("pipeline_loaded") else "🔴 Missing"
+    st.metric("Inference Pipeline", pipeline)
+with col3:
+    n_classes = models.get("multiclass", {}).get("num_classes", "0")
+    st.metric("Attack Classes", n_classes)
+
+st.divider()
+
 st.markdown(
     """
     Welcome to the CyberSentinel Intrusion Detection System dashboard.
@@ -72,21 +101,4 @@ st.markdown(
     """
 )
 
-# Quick status cards
-api = get_api()
-if api.is_reachable():
-    try:
-        health = api.health()
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            status = "🟢 Online" if health.get("pipeline_loaded") else "🔴 Offline"
-            st.metric("Pipeline", status)
-        with col2:
-            meta = "🟢 Loaded" if health.get("meta_loaded") else "🔴 Missing"
-            st.metric("Metadata", meta)
-        with col3:
-            models = api.get_models()
-            n_classes = models.get("multiclass", {}).get("num_classes", "?")
-            st.metric("Attack Classes", n_classes)
-    except Exception as e:
-        st.warning(f"Could not load status: {e}")
+# Cleaned up redundant status cards block

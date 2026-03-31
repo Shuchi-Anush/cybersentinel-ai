@@ -1,3 +1,7 @@
+# IMPORTANT:
+# Run using module mode:
+# python -m src.models.evaluator
+
 """
 CyberSentinel AI
 Machine Learning Intrusion Detection System
@@ -54,12 +58,8 @@ from src.training.multiclass_trainer import load_multiclass_model
 # Logging
 # ------------------------------------------------------------------
 
-logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-    level=logging.INFO,
-)
-logger = logging.getLogger("evaluator")
+# logging.basicConfig removed - assumes central configuration
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------
 # Paths
@@ -160,33 +160,41 @@ def _plot_pr_binary(y_true: pd.Series, y_proba: np.ndarray, out_dir: Path) -> fl
 
 
 def evaluate_binary(
+    x: pd.DataFrame,
+    y_binary: pd.Series,
     out_dir: Optional[Path] = None,
     split: str = "test",
 ) -> dict:
     """
-    Evaluate the binary classifier on the specified split.
+    Evaluate the binary classifier on the provided data.
 
-    Loads the saved model from MODELS_DIR / "binary" and the split from
-    DATA_DIR / "processed".  Saves plots and metrics to EVAL_DIR / "binary".
+    Loads the saved model from MODELS_DIR / "binary".
+    Saves plots and metrics to EVAL_DIR / "binary".
 
     Parameters
     ----------
+    x : pd.DataFrame
+        Input features.
+    y_binary : pd.Series
+        Binary target labels.
     out_dir : Path, optional
         Override default output directory.
     split : str
-        Which parquet split to evaluate on ('test', 'val', or 'train').
+        Name of the split for metrics (e.g., 'test').
 
     Returns
     -------
     dict
         All computed scalar metrics.
     """
+    if len(x) == 0:
+        raise ValueError(f"Empty dataset provided for binary evaluation (split='{split}')")
+
     t0 = time.time()
     out_dir = out_dir or BINARY_EVAL_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Evaluating binary classifier on '%s' split…", split)
-    x, y_binary, _ = load_splits(split)
     model = load_binary_model()
 
     y_pred = model.predict(x)
@@ -235,12 +243,13 @@ def evaluate_binary(
         json.dump(report_dict, fh, indent=2)
 
     logger.info(
-        "[BINARY %s] Accuracy=%.4f  F1(w)=%.4f  ROC-AUC=%.4f  AP=%.4f",
+        "[BINARY %s] Accuracy=%.4f  F1(w)=%.4f  ROC-AUC=%.4f  AP=%.4f (Took %.2fs)",
         split.upper(),
         metrics["accuracy"],
         metrics["f1_weighted"],
         metrics["roc_auc"],
         metrics["average_precision"],
+        time.time() - t0,
     )
     return metrics
 
@@ -350,27 +359,39 @@ def _plot_pr_ova(
 
 
 def evaluate_multiclass(
+    x_full: pd.DataFrame,
+    y_binary: pd.Series,
+    y_label: pd.Series,
     out_dir: Optional[Path] = None,
     split: str = "test",
 ) -> dict:
     """
-    Evaluate the multi-class attack classifier on the specified split.
+    Evaluate the multi-class attack classifier on the provided data.
 
-    Only attack rows (binary == 1) are evaluated — matching how the model
-    was trained.  Saves plots and metrics to EVAL_DIR / "multiclass".
+    Only attack rows (binary == 1) are evaluated.
+    Saves plots and metrics to EVAL_DIR / "multiclass".
 
     Parameters
     ----------
+    x_full : pd.DataFrame
+        Input features for the entire set.
+    y_binary : pd.Series
+        Binary labels (to mask benign rows).
+    y_label : pd.Series
+        Multi-class attack labels.
     out_dir : Path, optional
         Override default output directory.
     split : str
-        Which parquet split to evaluate ('test', 'val', or 'train').
+        Name of the split for metrics.
 
     Returns
     -------
     dict
         All computed scalar metrics.
     """
+    if len(x_full) == 0:
+        raise ValueError(f"Empty dataset provided for multiclass evaluation (split='{split}')")
+
     t0 = time.time()
     out_dir = out_dir or MULTICLASS_EVAL_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -379,7 +400,6 @@ def evaluate_multiclass(
         "Evaluating multi-class classifier on '%s' split (attack rows only)…", split
     )
 
-    x_full, y_binary, y_label = load_splits(split)
     model, encoder = load_multiclass_model()
 
     # Filter to attack rows only
@@ -481,12 +501,13 @@ def evaluate_multiclass(
         json.dump(report_dict, fh, indent=2)
 
     logger.info(
-        "[MULTICLASS %s] Accuracy=%.4f  F1(w)=%.4f  F1(macro)=%.4f  ROC-AUC(macro)=%s",
+        "[MULTICLASS %s] Accuracy=%.4f  F1(w)=%.4f  F1(macro)=%.4f  ROC-AUC(macro)=%s (Took %.2fs)",
         split.upper(),
         metrics["accuracy"],
         metrics["f1_weighted"],
         metrics["f1_macro"],
         metrics["roc_auc_macro"],
+        time.time() - t0,
     )
     return metrics
 
@@ -524,8 +545,12 @@ def run_evaluation(
     logger.info("Starting evaluation pipeline (split='%s')…", split)
     logger.info("=" * 55)
 
-    binary_metrics = evaluate_binary(out_dir=binary_out_dir, split=split)
-    multiclass_metrics = evaluate_multiclass(out_dir=multiclass_out_dir, split=split)
+    x, y_binary, y_label = load_splits(split)
+
+    binary_metrics = evaluate_binary(x, y_binary, out_dir=binary_out_dir, split=split)
+    multiclass_metrics = evaluate_multiclass(
+        x, y_binary, y_label, out_dir=multiclass_out_dir, split=split
+    )
 
     elapsed = round(time.time() - t0, 2)
 
@@ -561,25 +586,30 @@ def run_evaluation(
 
 
 def _print_summary(binary: dict, multiclass: dict, elapsed: float) -> None:
-    print("\n" + "=" * 60)
-    print("  Evaluation Summary")
-    print("=" * 60)
-    print(f"\n  Binary Classifier ({binary['split']} set):")
-    print(f"    Accuracy       : {binary['accuracy']:.4f}")
-    print(f"    F1 (weighted)  : {binary['f1_weighted']:.4f}")
-    print(f"    F1 (macro)     : {binary['f1_macro']:.4f}")
-    print(f"    ROC-AUC        : {binary['roc_auc']:.4f}")
-    print(f"    Avg Precision  : {binary['average_precision']:.4f}")
-    print(f"\n  Multi-class Classifier ({multiclass['split']} set — attack rows only):")
-    print(f"    Classes        : {multiclass['num_classes']}")
-    print(f"    Accuracy       : {multiclass['accuracy']:.4f}")
-    print(f"    F1 (weighted)  : {multiclass['f1_weighted']:.4f}")
-    print(f"    F1 (macro)     : {multiclass['f1_macro']:.4f}")
-    roc = multiclass["roc_auc_macro"]
-    print(f"    ROC-AUC (macro): {roc:.4f}" if roc else "    ROC-AUC (macro): N/A")
-    print(f"\n  Reports saved to : {EVAL_DIR}")
-    print(f"  Total elapsed    : {elapsed:.1f}s")
-    print("=" * 60)
+    """Print clean summary using logger instead of stdout."""
+    logger.info("=" * 60)
+    logger.info("  Evaluation Summary")
+    logger.info("=" * 60)
+    logger.info("  Binary Classifier (%s set):", binary['split'])
+    logger.info("    Accuracy       : %.4f", binary['accuracy'])
+    logger.info("    F1 (weighted)  : %.4f", binary['f1_weighted'])
+    logger.info("    F1 (macro)     : %.4f", binary['f1_macro'])
+    logger.info("    ROC-AUC        : %.4f", binary['roc_auc'])
+    logger.info("    Avg Precision  : %.4f", binary['average_precision'])
+    
+    logger.info("  Multi-class Classifier (%s set — attack rows only):", multiclass['split'])
+    logger.info("    Classes        : %d", multiclass['num_classes'])
+    logger.info("    Accuracy       : %.4f", multiclass['accuracy'])
+    logger.info("    F1 (weighted)  : %.4f", multiclass['f1_weighted'])
+    logger.info("    F1 (macro)     : %.4f", multiclass['f1_macro'])
+    
+    roc = multiclass.get("roc_auc_macro")
+    roc_val = f"{roc:.4f}" if roc else "N/A"
+    logger.info("    ROC-AUC (macro): %s", roc_val)
+    
+    logger.info("  Reports saved to : %s", EVAL_DIR)
+    logger.info("  Total elapsed    : %.1f s", elapsed)
+    logger.info("=" * 60)
 
 
 # ==================================================================
@@ -610,8 +640,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.binary_only:
-        evaluate_binary(split=args.split)
+        x, y_bin, _ = load_splits(args.split)
+        evaluate_binary(x, y_bin, split=args.split)
     elif args.multiclass_only:
-        evaluate_multiclass(split=args.split)
+        x, y_bin, y_lab = load_splits(args.split)
+        evaluate_multiclass(x, y_bin, y_lab, split=args.split)
     else:
         run_evaluation(split=args.split)

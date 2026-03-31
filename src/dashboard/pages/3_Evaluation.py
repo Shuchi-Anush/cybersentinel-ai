@@ -15,10 +15,11 @@ st.header("📈 Evaluation")
 api = get_api()
 
 if not api.is_reachable():
-    st.error("⚠️ API server is not reachable. Start it first.")
+    st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
-models = api.get_models()
+with st.spinner("📊 Extracting Performance Metrics..."):
+    models = api.get_models()
 
 # ------------------------------------------------------------------
 # Helpers
@@ -77,7 +78,7 @@ with tab_bin:
         "roc_auc": "ROC-AUC",
     }
     st.bar_chart(
-        build_metrics_df(vm, bin_map).set_index("Metric"), use_container_width=True
+        build_metrics_df(vm, bin_map).set_index("Metric"), width="stretch"
     )
     st.caption("Higher is better (0–1 scale)")
 
@@ -131,7 +132,7 @@ with tab_mc:
         "f1_macro": "F1 (macro)",
     }
     st.bar_chart(
-        build_metrics_df(mc_vm, mc_map).set_index("Metric"), use_container_width=True
+        build_metrics_df(mc_vm, mc_map).set_index("Metric"), width="stretch"
     )
     st.caption("Higher is better (0–1 scale)")
 
@@ -240,7 +241,7 @@ else:
         with pc2:
             st.markdown("**ROC-AUC Bar Chart**")
             st.bar_chart(
-                class_df.set_index("Class")["ROC-AUC"], use_container_width=True
+                class_df.set_index("Class")["ROC-AUC"], width="stretch"
             )
 
         # Highlight weakest classes
@@ -321,8 +322,13 @@ else:
 
         normalize = st.checkbox("Normalize Confusion Matrix")
         if normalize:
-            cm_df = cm_df.div(cm_df.sum(axis=1), axis=0)
-            st.caption("Normalized per row (percentage of actual class)")
+            # GUARD: sum of row must be > 0 to avoid division by zero
+            row_sums = cm_df.sum(axis=1)
+            if (row_sums > 0).all():
+                cm_df = cm_df.div(row_sums, axis=0)
+                st.caption("Normalized per row (percentage of actual class)")
+            else:
+                st.warning("⚠️ Some classes have zero actual samples; skipping normalization.")
 
         # Apply a background gradient to mimic seaborn heatmap
         st.dataframe(cm_df.style.background_gradient(cmap="Blues"), width="stretch")
@@ -331,8 +337,21 @@ else:
             "Darker cells indicate higher frequency."
         )
 
-    # --------------------------------------------------------------
-    # Raw Metadata
-    # --------------------------------------------------------------
     with st.expander("🔧 Debug: Full Evaluation JSON"):
         st.json(eval_data)
+
+# ------------------------------------------------------------------
+# Executive Summary
+# ------------------------------------------------------------------
+st.divider()
+st.subheader("📌 Executive Summary")
+
+# Data already loaded into mc_eval near Line 196
+f1_macro = mc_eval.get("f1_macro", 0.0)
+
+if f1_macro < 0.85:
+    st.error(f"**Action Required:** Model struggles on minority attack classes (F1 Macro: {f1_macro:.4f})")
+elif f1_macro < 0.90:
+    st.warning(f"**Optimization Recommended:** Some attack classes need improvement (F1 Macro: {f1_macro:.4f})")
+else:
+    st.success(f"**Production Ready:** Model performs robustly across classes (F1 Macro: {f1_macro:.4f})")

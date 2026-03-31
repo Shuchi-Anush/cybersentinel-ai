@@ -19,7 +19,7 @@ api = get_api()
 # ------------------------------------------------------------------
 
 if not api.is_reachable():
-    st.error("⚠️ API server is not reachable. Start it first.")
+    st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
 # ------------------------------------------------------------------
@@ -28,7 +28,16 @@ if not api.is_reachable():
 
 st.subheader("Pipeline Status")
 
-health = api.health()
+with st.spinner("Loading System Overview..."):
+    health = api.health()
+    models = api.get_models()
+    features = api.get_features()
+    config = api.get_config()
+
+# ------------------------------------------------------------------
+# 1. Pipeline Health
+# ------------------------------------------------------------------
+st.subheader("Pipeline Status")
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -40,15 +49,30 @@ with col2:
 with col3:
     st.metric("API Status", health.get("status", "unknown").upper())
 
+# ------------------------------------------------------------------
+# 1.5 System Health Score
+# ------------------------------------------------------------------
+st.subheader("🧠 System Health Score")
+
+binary_acc = models.get("binary", {}).get("val_metrics", {}).get("accuracy", 0.0)
+multi_acc = models.get("multiclass", {}).get("val_metrics", {}).get("accuracy", 0.0)
+
+# Weighted score: 40% Binary accuracy, 60% Multiclass accuracy
+health_score = (0.4 * binary_acc) + (0.6 * multi_acc)
+
+st.metric(
+    label="Overall Health",
+    value=f"{health_score * 100:.2f}%",
+    delta=f"{health_score:.4f}",
+    help="Weighted aggregate of binary (40%) and multiclass (60%) validation accuracies."
+)
+
 st.divider()
 
 # ------------------------------------------------------------------
 # 2. Model Summary Cards
 # ------------------------------------------------------------------
-
 st.subheader("Model Summary")
-
-models = api.get_models()
 
 binary = models.get("binary", {})
 multi = models.get("multiclass", {})
@@ -61,11 +85,11 @@ with col_b:
     b_vm = binary.get("val_metrics", {})
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.metric("Accuracy", f"{b_vm.get('accuracy', 0):.4f}")
+        st.metric("Accuracy", f"{b_vm.get('accuracy', 0.0):.4f}")
     with m2:
-        st.metric("F1 (weighted)", f"{b_vm.get('f1_weighted', 0):.4f}")
+        st.metric("F1 (weighted)", f"{b_vm.get('f1_weighted', 0.0):.4f}")
     with m3:
-        st.metric("ROC-AUC", f"{b_vm.get('roc_auc', 0):.4f}")
+        st.metric("ROC-AUC", f"{b_vm.get('roc_auc', 0.0):.4f}")
     st.caption(
         f"Model: {binary.get('model_type', '—')} · Classes: {binary.get('classes', {})}"
     )
@@ -75,9 +99,9 @@ with col_m:
     mc_vm = multi.get("val_metrics", {})
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.metric("Accuracy", f"{mc_vm.get('accuracy', 0):.4f}")
+        st.metric("Accuracy", f"{mc_vm.get('accuracy', 0.0):.4f}")
     with m2:
-        st.metric("F1 (macro)", f"{mc_vm.get('f1_macro', 0):.4f}")
+        st.metric("F1 (macro)", f"{mc_vm.get('f1_macro', 0.0):.4f}")
     with m3:
         st.metric("Attack Classes", multi.get("num_classes", 0))
     classes_str = ", ".join(multi.get("attack_classes", [])[:5])
@@ -117,7 +141,7 @@ with col_d:
                 {"Class": "Attack (1)", "Count": train_dist.get("1", 0)},
             ]
         )
-        st.bar_chart(dist_df.set_index("Class"), use_container_width=True)
+        st.bar_chart(dist_df.set_index("Class"), width="stretch")
 
 st.divider()
 
@@ -126,8 +150,6 @@ st.divider()
 # ------------------------------------------------------------------
 
 st.subheader("Feature Importances (Top 20)")
-
-features = api.get_features()
 
 view = st.radio(
     "Model",
@@ -145,7 +167,7 @@ if importances:
     imp_df = pd.DataFrame(
         {"Feature": list(importances.keys()), "Importance": list(importances.values())}
     ).sort_values("Importance", ascending=True)
-    st.bar_chart(imp_df.set_index("Feature"), horizontal=True, use_container_width=True)
+    st.bar_chart(imp_df.set_index("Feature"), horizontal=True, width="stretch")
     st.caption(f"Total selected features: {features.get('feature_count', '?')}")
 else:
     st.info("No feature importances available.")
@@ -157,8 +179,6 @@ st.divider()
 # ------------------------------------------------------------------
 
 st.subheader("Training Configuration")
-
-config = api.get_config()
 
 tab_fs, tab_bt, tab_mt = st.tabs(
     ["Feature Selection", "Binary Training", "Multi-class Training"]
