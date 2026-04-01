@@ -1,5 +1,4 @@
 <!-- markdownlint-disable MD033 -->
-
 <!-- markdownlint-disable MD045 -->
 
 # 🛡️ CyberSentinel-AI
@@ -102,6 +101,14 @@ No human required.
 
 ---
 
+## 🏛️ Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="Architecture" width="85%">
+</p>
+
+---
+
 ## 🧠 Core Pipeline
 
 ```text
@@ -120,12 +127,8 @@ Policy Mapping
 Action (ALLOW / QUARANTINE / DENY)
 ```
 
----
-
-## 🏛️ Architecture
-
 <p align="center">
-  <img src="docs/assets/pipeline.png" alt="Architecture" width="85%">
+  <img src="docs/assets/pipeline.png" alt="Pipeline" width="85%">
 </p>
 
 ---
