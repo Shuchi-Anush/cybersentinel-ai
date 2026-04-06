@@ -8,16 +8,20 @@ import subprocess
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from payload_factory import PayloadFactory
+from tests.payload_factory import PayloadFactory
 
 # ------------------------------------------------------------------
 # CONFIG
 # ------------------------------------------------------------------
+from src.core.paths import TESTING_ARTIFACTS_DIR
+
 BASE_URL = "http://127.0.0.1:8081"
 CONCURRENCY_LEVELS = [10, 50, 100, 250, 500]
 DURATION_PER_LEVEL = 15
-REPORT_FILE = "simulation_report.json"
-SERVER_LOG = "server_test.log"
+
+TESTING_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+REPORT_FILE = TESTING_ARTIFACTS_DIR / "simulation_report.json"
+SERVER_LOG = TESTING_ARTIFACTS_DIR / "server_test.log"
 
 class StressOrchestrator:
     def __init__(self):

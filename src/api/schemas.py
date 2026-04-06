@@ -6,17 +6,25 @@ Defines Pydantic models for the FastAPI request/response payloads.
 """
 
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
-class FlowRequest(BaseModel):
+class PredictRequest(BaseModel):
     """Single network flow prediction request."""
 
-    features: Dict[str, float] = Field(
-        ...,
-        description="Dictionary of network flow features. Keys should match selected feature names.",
-        example={"Flow Duration": 120.5, "Total Fwd Packets": 2.0},
-    )
+    features: dict
+
+    @field_validator("features")
+    @classmethod
+    def validate_features(cls, v):
+        if not v:
+            raise ValueError("features cannot be empty")
+        return v
+
+
+class FlowRequest(PredictRequest):
+    """Legacy alias for PredictRequest."""
+    pass
 
 
 class FlowBatchRequest(BaseModel):
@@ -28,15 +36,12 @@ class FlowBatchRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    """Structured policy decision response."""
+    """Strict policy decision response (Contract enforced)."""
 
     action: str = Field(..., description="ALLOW, QUARANTINE, or DENY")
-    binary_pred: int = Field(..., description="0 for Benign, 1 for Attack")
     confidence: float = Field(
         ..., description="Confidence score of the binary prediction"
     )
     attack_type: Optional[str] = Field(
         None, description="Type of attack if binary_pred is 1"
     )
-    timestamp: str = Field(..., description="Timestamp of the decision")
-    reason: str = Field(..., description="Human-readable reason for the action")

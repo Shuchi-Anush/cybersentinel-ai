@@ -30,30 +30,29 @@ import joblib
 # PATH CONFIGURATION
 # ---------------------------------------------------------
 
-from src.core.paths import DATA_DIR as BASE_DATA_DIR, MODELS_DIR
-
-DATA_DIR = BASE_DATA_DIR / "raw" / "CICIDS2017"
-MODEL_DIR = MODELS_DIR
-OUTPUT_DIR = MODELS_DIR.parent / "outputs"
-
-MODEL_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
-
+from src.core.paths import RAW_DATA_DIR
 
 # ---------------------------------------------------------
 # SCENARIO BASED DATA SPLIT (Prevents data leakage)
 # ---------------------------------------------------------
 
-TRAIN_FILES = [
-    "Monday-WorkingHours.pcap_ISCX.csv",
-    "Tuesday-WorkingHours.pcap_ISCX.csv",
-    "Wednesday-workingHours.pcap_ISCX.csv",
-]
+import yaml
+from src.core.paths import CONFIGS_DIR, MODELS_DIR, ARTIFACTS_DIR
 
-TEST_FILES = [
-    "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
-    "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
-]
+with open(CONFIGS_DIR / "data.yaml", "r") as f:
+    _data_config = yaml.safe_load(f)
+    
+TRAIN_FILES = _data_config["split"]["train_days"]
+TEST_FILES = _data_config["split"]["test_days"]
+DATA_SUBDIR = _data_config["dataset"]["name"]
+DATA_DIR = RAW_DATA_DIR / DATA_SUBDIR
+
+MODEL_DIR = MODELS_DIR
+OUTPUT_DIR = ARTIFACTS_DIR / "training"
+
+MODEL_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
+
 
 
 # ---------------------------------------------------------
@@ -79,6 +78,9 @@ def load_cic_dataset(file_list):
         dfs.append(df)
 
     combined = pd.concat(dfs, ignore_index=True)
+    
+    # Strip leading/trailing spaces from column names (Standard CICIDS format fix)
+    combined.columns = combined.columns.str.strip()
 
     return combined
 
@@ -150,18 +152,25 @@ def plot_confusion_matrix(cm, model_name):
 # ---------------------------------------------------------
 
 
+from sklearn.model_selection import train_test_split
+
 def train_models():
 
-    print("\nLoading CIC-IDS2017 dataset...\n")
+    print("\nLoading and Combining CIC-IDS2017 dataset pools...\n")
 
-    train_df = load_cic_dataset(TRAIN_FILES)
-    test_df = load_cic_dataset(TEST_FILES)
+    # Combine all configured files to ensure full label coverage
+    all_files = list(set(TRAIN_FILES + TEST_FILES))
+    full_df = load_cic_dataset(all_files)
+    
+    full_df = clean_dataset(full_df)
 
-    train_df = clean_dataset(train_df)
-    test_df = clean_dataset(test_df)
+    X_raw, y_raw = prepare_features(full_df)
 
-    X_train, y_train = prepare_features(train_df)
-    X_test, y_test = prepare_features(test_df)
+    # Stratified split to ensure all labels are represented in both sets
+    print("\nExecuting stratified train-test split (80/20)...")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_raw, y_raw, test_size=0.2, random_state=42, stratify=y_raw
+    )
 
     # Encode labels
     label_encoder = LabelEncoder()

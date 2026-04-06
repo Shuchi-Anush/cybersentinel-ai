@@ -1,37 +1,24 @@
+.PHONY: install run-api run-dashboard test lint scenario clean
+
 install:
-	pip install -r requirements.txt
+	python -m pip install -r requirements.txt
 
-feature-selection:
-	python src/features/selector.py
+run-api:
+	python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
-preprocess:
-	python src/features/preprocessor.py
-
-train-binary:
-	python src/training/binary_trainer.py
-
-train-multiclass:
-	python src/training/multiclass_trainer.py
-
-evaluate:
-	python src/models/evaluator.py
-
-api:
-	uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-
-dashboard:
+run-dashboard:
 	streamlit run src/dashboard/app.py
 
-docker-build:
-	docker build -t cybersentinel .
+test:
+	python -m pytest tests/ --tb=short
 
-docker-run:
-	docker run -p 8000:8000 cybersentinel
+lint:
+	python -m ruff check src/ scripts/ tests/
 
-run:
-	python scripts/demo_runner.py
+scenario:
+	python -m scripts.scenario_extractor
+	python -m scripts.scenario_validator
 
 clean:
-	find . -type d -name "__pycache__" -exec rm -r {} +
-	find . -name "*.pyc" -delete
-	find . -name "*.tmp" -delete
+	rm -rf __pycache__ .pytest_cache htmlcov .coverage
+	find . -type d -name "__pycache__" -exec rm -rf {} +

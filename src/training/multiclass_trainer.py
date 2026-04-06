@@ -51,6 +51,7 @@ from sklearn.metrics import (
     recall_score,
 )
 from sklearn.preprocessing import LabelEncoder
+from skl2onnx import to_onnx
 
 from src.features.preprocessor import load_splits
 
@@ -392,6 +393,16 @@ def train_multiclass_classifier(
     joblib.dump(encoder, encoder_path)
     logger.info("Saved model → %s", model_path)
     logger.info("Saved encoder → %s", encoder_path)
+
+    # ---- export to ONNX (multi-class model only for high-speed inference) ----
+    try:
+        onx = to_onnx(model, x_train[:1].to_numpy(dtype=np.float32))
+        onnx_path = model_dir / "multiclass_model.onnx"
+        with open(onnx_path, "wb") as f:
+            f.write(onx.SerializeToString())
+        logger.info("Exported multi-class model to ONNX → %s", onnx_path)
+    except Exception as e:
+        logger.error("Failed to export multi-class model to ONNX: %s", e)
 
     # ---- feature importance -------------------------------------------
     importance_series = pd.Series(

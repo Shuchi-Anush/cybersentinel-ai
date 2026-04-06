@@ -41,22 +41,14 @@ class CyberSentinelAPI:
     def __init__(self, base_url: str = API_URL, timeout: float = 10.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._health_cache: dict = {}
 
     # ----------------------------------------------------------------
     # GET endpoints (metadata — cached by Streamlit)
     # ----------------------------------------------------------------
 
-    @st.cache_data(ttl=30, show_spinner=False)
-    def health(_self) -> dict:
+    def health(self) -> dict:
         """GET /health — pipeline and meta service status."""
-        try:
-            res = _self._get("/health")
-            if "error" not in res:
-                _self._health_cache = res
-            return res
-        except Exception:
-            return _self._health_cache or {"status": "offline", "error": "API unreachable"}
+        return self._get("/health")
 
     @st.cache_data(ttl=300, show_spinner=False)
     def get_features(_self) -> dict:
@@ -77,10 +69,15 @@ class CyberSentinelAPI:
     def get_eval(_self) -> Optional[dict]:
         """GET /meta/eval — evaluation summary (None if 404)."""
         try:
-            return _self._get("/meta/eval")
+            data = _self._get("/meta/eval")
+            if data and "pipeline_error" in data:
+                data["pipeline_error"] = data["pipeline_error"][:500]
+            return data
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 return None
+            raise
+        except:
             raise
 
     @st.cache_data(ttl=300, show_spinner=False)
@@ -114,13 +111,15 @@ class CyberSentinelAPI:
                 return resp.json()
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                 if attempt == 2:
-                    logger.warning(f"API GET {path} failed after 3 attempts: {e}")
-                    return {"error": f"API timeout/connection error: {str(e)}"}
-                time.sleep(0.5)
+                    logger.error(f"API GET {path} failed after 3 attempts: {e}")
+                    raise
+                time.sleep(0.1 * (attempt + 1))
             except requests.exceptions.HTTPError as e:
                 logger.error(f"API GET {path} HTTP error: {e}")
                 raise
-        return {"error": "Unknown API error"}
+            except:
+                raise
+        raise requests.exceptions.RequestException(f"Unknown failure for {path}")
 
     def _post(self, path: str, json: dict) -> Any:
         """Issue a POST request with retries and timeout handling."""
@@ -132,27 +131,20 @@ class CyberSentinelAPI:
                 return resp.json()
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                 if attempt == 2:
-                    logger.warning(f"API POST {path} failed after 3 attempts: {e}")
-                    return {"error": "API timeout/connection error"}
-                time.sleep(0.5)
+                    logger.error(f"API POST {path} failed after 3 attempts: {e}")
+                    raise
+                time.sleep(0.1 * (attempt + 1))
             except requests.exceptions.HTTPError as e:
                 logger.error(f"API POST {path} HTTP error: {e}")
                 raise
-        return {"error": "Unknown API error"}
-
-    def is_reachable(self) -> bool:
-        """Check if the API server is reachable."""
-        try:
-            self.health()
-            return True
-        except Exception:
-            return False
+            except:
+                raise
+        raise requests.exceptions.RequestException(f"Unknown failure for {path}")
 
 
 # ------------------------------------------------------------------
 # Module-level singleton
 # ------------------------------------------------------------------
-
 
 @st.cache_resource
 def get_api(base_url: str = API_URL) -> CyberSentinelAPI:

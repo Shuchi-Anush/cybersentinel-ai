@@ -18,7 +18,13 @@ api = get_api()
 # Connection guard
 # ------------------------------------------------------------------
 
-if not api.is_reachable():
+try:
+    health = api.health()
+    api_online = True
+except Exception:
+    api_online = False
+
+if not api_online:
     st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
@@ -37,15 +43,28 @@ with st.spinner("Loading System Overview..."):
 # ------------------------------------------------------------------
 # 1. Pipeline Health
 # ------------------------------------------------------------------
-st.subheader("Pipeline Status")
+# Pipeline Status Calculation (Hierarchical)
+if not api_online:
+    pipeline_status = "🔴 Offline"
+elif health.get("pipeline_error") is not None:
+    pipeline_status = "🔴 Error"
+elif health.get("pipeline_ready"):
+    pipeline_status = "🟢 Online"
+else:
+    pipeline_status = "🟡 Loading"
+
+# Metadata Status Calculation
+metadata_status = (
+    "🔴 Offline" if not api_online else 
+    "🟢 Available" if health.get("meta_ready") else 
+    "🔴 Missing"
+)
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    val = "🟢 Online" if health.get("pipeline_loaded") else "🔴 Offline"
-    st.metric("Inference Pipeline", val)
+    st.metric("Inference Pipeline", pipeline_status)
 with col2:
-    val = "🟢 Loaded" if health.get("meta_loaded") else "🔴 Missing"
-    st.metric("Metadata Service", val)
+    st.metric("Metadata Service", metadata_status)
 with col3:
     st.metric("API Status", health.get("status", "unknown").upper())
 

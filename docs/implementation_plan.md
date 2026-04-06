@@ -1,46 +1,63 @@
-# Implementation Plan — Surgical Production Hardening
+# Final Stabilization Patch — CyberSentinel-AI Dashboard
 
-Finalize the transition of CyberSentinel-AI from "Functionally Correct" to "Production Hardened" via surgical, high-impact refinements.
+This plan outlines the final surgical fixes to resolve dashboard state synchronization issues, harden the API client, and ensure the UI strictly aligns with the production backend contract.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Static Mean Baseline**: If the dataset is missing, I will now return a hard-coded "Mean Baseline" for the demo payload, providing a neutral/safe input rather than random noise. This ensures the demo behavior is stable even in artifact-restricted environments.
+> **API Client Refactor**: Moving all Streamlit caching (`@st.cache_data`) from class methods to module-level functions. The `health` check is explicitly **NON-CACHED** to ensure real-time status detection during model loading.
+
+> [!IMPORTANT]
+> **Forced Refresh**: Implementing a "Boot Refresh" mechanism in `app.py`. This ensures that when the backend transitions from "Loading" to "Online" in the background, the UI synchronizes immediately rather than waiting for the next 5s poll.
 
 ## Proposed Changes
 
-### 🛡️ 1. Inference Pipeline Hardening (`src/inference/`)
-- **[MODIFY] [inference_pipeline.py](file:///d:/cybersentinel-ai/src/inference/inference_pipeline.py)**:
-    - **Task 1**: Scan `__init__` and `predict` logic for any remaining `print` statements and replace them with `logger.debug`.
-    - **Task 4**: Update `__init__` to load `self._threshold` from `os.getenv("BINARY_THRESHOLD", 0.3)`.
-    - **Task 5**: Add explanatory comment: `"ONNX used for speed, sklearn model used for calibrated probabilities"`.
+### [Component] API Client Hardening
 
-### 🧪 2. Payload Generator Fixes (`scripts/`)
-- **[MODIFY] [generate_payload.py](file:///d:/cybersentinel-ai/scripts/generate_payload.py)**:
-    - **Task 2**: 
-        - Remove `random.uniform` fallback.
-        - Load `models/preprocessing_metadata.json` for fallback.
-        - Implement `get_fallback_payload` using a zero-value baseline or feature-neutral baseline.
-    - **Task 3**: Update label sampling filters:
-        - `BENIGN`: `Label == "BENIGN"`
-        - `QUARANTINE`: `["PortScan", "Bot", "Infiltration", "Web Attack - Brute Force"]`
-        - `ATTACK`: `["DoS slowloris", "DoS Hulk", "DDoS"]`
+#### [MODIFY] [api_client.py](file:///d:/cybersentinel-ai/src/dashboard/api_client.py)
+1. **Module-Level Helpers**:
+    - Implement `_internal_request(method, base_url, path, timeout, json_data)` with:
+        - 3 retries.
+        - Exponential backoff: `0.5 * (attempt + 1)`.
+        - Proper exception raising (`RequestException`).
+2. **Metadata Functions (Cached)**:
+    - `_features_cached`, `_models_cached`, `_policy_cached`, `_eval_cached`, `_config_cached` with TTL 300s.
+    - **Fix (Task 1)**: Ensure `_get_policy` calls `_internal_request` correctly.
+3. **Health Function (Real-time)**:
+    - **Fix (Task 2)**: `_get_health` without caching.
+4. **API Class**: Refactor to call these helpers. Remove `is_reachable` and old fallback logic.
 
-### 🚀 3. System Verification
-- **Task 6**: Execute `python scripts/demo_runner.py` to confirm correct action mapping:
-    - **BENIGN** → `ALLOW`
-    - **QUARANTINE** → `QUARANTINE`
-    - **ATTACK** → `DENY`
+### [Component] Dashboard Entry Point
 
----
+#### [MODIFY] [app.py](file:///d:/cybersentinel-ai/src/dashboard/app.py)
+1. **State Fetching**:
+    - Use a single `health = api.health()` call in a `try/except` block.
+    - **Fix (Task 4)**: Implement the following logic immediately after fetching `health`:
+      ```python
+      if api_online and not pipeline_ready and not pipeline_error:
+          if "boot_refresh_done" not in st.session_state:
+              st.session_state.boot_refresh_done = True
+              st.rerun()
+      ```
+2. **Strict Status Mapping**:
+    - Apply EXACT rules for Offline/Error/Online/Loading.
+    - **Fix (Task 3)**: Use `pipeline_error is not None` for the error condition.
+3. **Resilient Metrics**:
+    - Update the metrics row to display mapped statuses.
+    - Wrap `api.get_models()` in a `try/except` block for total UI stability.
+4. **Auto Refresh**: Update fixed 5s refresh logic using `st.session_state` to prevent infinite loop instability.
+
+## Open Questions
+
+- None. The fixes are targeted and highly specific to reported bugs.
 
 ## Verification Plan
 
-### Automated Checks
-- `pytest` suite for regression testing.
-- `demo_runner.py` for functional validation of policy actions.
+### Automated Tests
+- None (Visual/Integrative verification is primary).
 
-### Final Readiness Check
-- No `print` logs in `stdout`.
-- No `random` noise in demo payloads.
-- Configuration successfully picked up via `.env` or environment.
+### Manual Verification
+1. **Startup Check**: Observe **"🟡 Loading"** for 5-10s while background model loading occurs.
+2. **Sync Check**: Verify the UI automatically refreshes to **"🟢 Online"** once the pipeline is ready (testing the boot refresh).
+3. **Error Check**: Simulate a load failure and verify **"🔴 Error"** shows with a truncated snippet.
+4. **Downtime**: Stop the API and verify all metrics instantly show **"🔴 Offline"**.

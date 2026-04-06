@@ -36,9 +36,10 @@ import numpy as np
 import pandas as pd
 
 from src.features.preprocessor import load_scaler
-from src.training.binary_trainer import load_binary_model
 from src.training.multiclass_trainer import load_multiclass_model
 from src.policy.policy_mapper import PolicyDecision, PolicyMapper
+from src.core.trust_engine import compute_trust_score
+from src.core.feedback_logger import log_feedback_async
 from fastapi import HTTPException
 import joblib
 
@@ -111,11 +112,32 @@ class InferencePipeline:
         t0 = time.time()
         logger.info("Loading inference artifacts…")
 
-        # Threshold loaded from environment for production tuning
-        # Default 0.3 ensures consistent behavior with currently trained models
         self._threshold = float(os.getenv("BINARY_THRESHOLD", binary_threshold))
+        
+        # 1. Single Source of Truth Validation (CRITICAL)
+        # Enforce metadata.json as canonical. Fail-fast if models/binary/features.pkl differs.
+        import json
+        meta_path = MODELS_DIR / "binary" / "metadata.json"
+        
+        try:
+            with open(meta_path, "r") as f:
+                meta_json = json.load(f)
+                json_features = meta_json.get("data", {}).get("features", [])
+        except Exception as e:
+            logger.error(f"Failed to load canonical metadata.json: {e}")
+            raise
 
         self._features: list[str] = joblib.load(MODELS_DIR / "binary" / "features.pkl")
+        
+        if json_features != self._features:
+            error_msg = (
+                f"CRITICAL: Feature mismatch! "
+                f"metadata.json ({len(json_features)}) != features.pkl ({len(self._features)}). "
+                "Inconsistent retraining artifacts detected. Failing fast."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
         self._scaler = load_scaler(scaler_path)
         import onnxruntime as rt
         
@@ -129,6 +151,8 @@ class InferencePipeline:
         )
         # Note: ONNX used for speed, sklearn model used for calibrated probabilities
         self._calibrated_binary = joblib.load(MODELS_DIR / "binary" / "calibrated_binary_model.pkl")
+        self.mean = self._scaler.mean_
+        self.scale = self._scaler.scale_
         _, self._encoder = load_multiclass_model(multiclass_model_dir)
         self._policy = PolicyMapper(policy_config_path)
 
@@ -155,13 +179,29 @@ class InferencePipeline:
 
         Returns
         -------
-        PolicyDecision
+        dict
+            Full structured policy decision with trust telemetry.
         """
         if isinstance(row, dict):
             row = pd.Series(row)
         df_single = row.to_frame().T
         results = self.predict(df_single)
-        return results[0]
+        
+        # Unpack for specific return structure requested by user
+        res = results[0]
+
+        return {
+            "prediction": res["prediction"],
+            "attack_type": res["attack_type"],
+            "action": res["action"],
+            "confidence": float(res["confidence"]),
+            "margin": float(res["margin"]),
+            "attack_proba": res["attack_proba"],
+            "trust": {
+                "trust_score": float(res["trust"]["trust_score"]),
+                "risk_level": str(res["trust"]["risk_level"])
+            }
+        }
 
     def predict(self, df: pd.DataFrame) -> list[PolicyDecision]:
         """
@@ -194,34 +234,40 @@ class InferencePipeline:
             dtype=np.float32,
         )
 
-        # ---- 3. Binary prediction (ONNX Base + Python Calibrated) ----
-        # Enforce exact feature ordering BEFORE inference
+        # ---- 3. Binary prediction (Optimized: ONNX + Calibrated Trust) ----
+        # Rationale: ONNX is used for high-speed standardized inference. 
+        # CalibratedClassifierCV (Sklearn) is run concurrently ONLY because it provides 
+        # high-fidelity "trust scores" required by the Policy Engine which raw 
+        # binary ONNX outputs often lack in specialized production builds.
+        
         x_scaled = x_scaled[self._features].copy()
         x_numpy = x_scaled.to_numpy(dtype=np.float32)
         
+        # Perform primary binary classification via ONNX
         input_b = self._binary_sess.get_inputs()[0].name
         outputs_b = self._binary_sess.run(None, {input_b: x_numpy})
         
         if len(outputs_b) < 2:
             raise RuntimeError("ONNX output malformed")
         
-        # trust score clamp (safety)
-        # Probabilities calibrated via Scikit-Learn wrapper for reliable trust scores
-        attack_proba_col = self._calibrated_binary.predict_proba(x_scaled)[:, 1]  
-        # P(attack)
-        attack_proba_col = np.clip(attack_proba_col, 0.0, 1.0)
-        binary_preds = (attack_proba_col >= self._threshold).astype(int)
-        _ = outputs_b[1]
+        # Binary prediction (0/1) directly from ONNX output to avoid redundant compute
+        # logic in the primary classification branch.
+        binary_preds = outputs_b[0].tolist()
         
+        # Confidence/Trust scores from Calibrated model (No redundant compute applied:
+        # the model is run specifically for the probability distribution).
+        attack_proba_col = self._calibrated_binary.predict_proba(x_scaled)[:, 1]  
+        attack_proba_col = np.clip(attack_proba_col, 0.0, 1.0)
+        
+        binary_preds = np.array(binary_preds).astype(int)
         binary_confidences = np.where(
             binary_preds == 1, attack_proba_col, 1.0 - attack_proba_col
         )
 
-        # ---- 4. Multi-class — only for rows flagged as attack --------
+        attack_indices = np.nonzero(binary_preds == 1)[0]
         attack_types: list[Optional[str]] = [None] * len(df)
         attack_probas: list[Optional[dict[str, float]]] = [None] * len(df)
-
-        attack_indices = np.nonzero(binary_preds == 1)[0]
+        margins: list[float] = [0.0] * len(df)
         if len(attack_indices) > 0:
             x_attack = x_scaled.iloc[attack_indices]
             x_attack_np = x_attack.to_numpy(dtype=np.float32)
@@ -242,21 +288,96 @@ class InferencePipeline:
                     [predicted_class_idx]
                 )[0]
                 # Format probas explicitly based on ONNX dictionary structure
-                raw_probas = mc_proba[local_i]
+                raw_probas = mc_proba[local_i] # ONNX maps
+                sorted_vals = sorted(raw_probas.values(), reverse=True)
+                margins[global_i] = float(sorted_vals[0] - sorted_vals[1] if len(sorted_vals) > 1 else sorted_vals[0])
+
                 attack_probas[global_i] = {
                     cls: round(float(raw_probas.get(j, 0.0)), 6)
                     for j, cls in enumerate(class_names)
                 }
 
-        # ---- 5. Policy mapping --------------------------------------
-        decisions = self._policy.map_batch(
-            binary_preds=binary_preds.tolist(),
-            binary_confidences=[round(float(c), 6) for c in binary_confidences],
-            attack_types=attack_types,
-            attack_probas=attack_probas,
-        )
+        # ---- 5. Enterprise Zero-Trust Decision Layer -----------------
+        final_decisions: list[dict] = []
+        
+        for i in range(len(df)):
+            # Extract feature vector for this row
+            feature_vector = x_numpy[i]
+            
+            # CRITICAL VALIDATION (Production Shape Check)
+            if len(feature_vector) != len(self.mean):
+                raise ValueError(
+                    f"CRITICAL: Feature length mismatch. "
+                    f"Expected {len(self.mean)}, got {len(feature_vector)}"
+                )
+            
+            # Compute trust score via Enterprise Engine (multi-signal)
+            trust_data = compute_trust_score(
+                prob=float(binary_confidences[i]),
+                attack_type=attack_types[i] or "Normal",
+                feature_vector=feature_vector,
+                mean=self.mean,
+                scale=self.scale,
+                margin=float(margins[i]),
+            )
 
-        # Structured logging step 8 (REMOVED: PER-ROW LOGGING TO REDUCE NOISE)
+            computed_ts = float(trust_data["trust_score"])
+            confidence_val = float(binary_confidences[i])
+
+            prediction_label = "Attack" if binary_preds[i] == 1 else "Normal"
+
+            # ── Confidence-primary policy (trust is auxiliary / explainability only) ──
+            if prediction_label == "Attack":
+                if confidence_val >= 0.85:
+                    final_action = "DENY"
+                    risk_level   = "HIGH"
+                elif confidence_val >= 0.6:
+                    final_action = "QUARANTINE"
+                    risk_level   = "HIGH"
+                else:
+                    final_action = "QUARANTINE"
+                    risk_level   = "MEDIUM"
+            else:
+                # Normal prediction
+                if confidence_val >= 0.8:
+                    final_action = "ALLOW"
+                    risk_level   = "LOW"
+                else:
+                    final_action = "QUARANTINE"
+                    risk_level   = "MEDIUM"
+
+            # Build decision object
+            decision = {
+                "action": final_action,
+                "confidence": float(binary_confidences[i]),
+                "attack_type": attack_types[i],
+                "prediction": prediction_label,
+                "binary_pred": int(binary_preds[i]),
+                "trust": {
+                    "trust_score": round(computed_ts, 4),
+                    "risk_level": risk_level
+                },
+                "attack_proba": attack_probas[i],
+                "margin": float(margins[i])
+            }
+            final_decisions.append(decision)
+            
+            # Async Anomaly Feedback Logging (Non-blocking)
+            if risk_level == "HIGH" or binary_preds[i] == 1:
+                log_feedback_async({
+                    "prediction": decision["prediction"],
+                    "attack_type": decision["attack_type"],
+                    "trust": decision["trust"],
+                    "features": feature_vector.tolist()
+                })
+            
+            # Per-flow audit logging
+            logger.info(
+                f"Prediction={prediction_label} | "
+                f"Conf={confidence_val:.4f} | "
+                f"Trust={computed_ts:.4f} | "
+                f"Action={final_action}"
+            )
 
         elapsed = time.time() - t0
         logger.info(
@@ -265,12 +386,12 @@ class InferencePipeline:
             len(df),
             elapsed,
             len(df) / elapsed if elapsed > 0 else float("inf"),
-            sum(1 for d in decisions if d.action.value == "ALLOW"),
-            sum(1 for d in decisions if d.action.value == "QUARANTINE"),
-            sum(1 for d in decisions if d.action.value == "DENY"),
+            sum(1 for d in final_decisions if d["action"] == "ALLOW"),
+            sum(1 for d in final_decisions if d["action"] == "QUARANTINE"),
+            sum(1 for d in final_decisions if d["action"] == "DENY"),
         )
 
-        return decisions
+        return final_decisions
 
     # ----------------------------------------------------------------
     # Results formatting

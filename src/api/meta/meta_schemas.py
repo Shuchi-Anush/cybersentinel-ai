@@ -102,10 +102,10 @@ class PolicyResponse(BaseModel):
 
 
 class EvalResponse(BaseModel):
-    """Evaluation summary (binary + multiclass)."""
+    """Strict evaluation summary response (Contract enforced)."""
 
-    binary: dict = Field(default_factory=dict)
-    multiclass: dict = Field(default_factory=dict)
+    f1_macro: float = Field(0.0, description="Macro-averaged F1 score on the test set")
+    status: str = Field("missing", description="Status of the evaluation data (ok/missing)")
 
 
 # ------------------------------------------------------------------

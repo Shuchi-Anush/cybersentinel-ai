@@ -1,15 +1,14 @@
 import pandas as pd
 import json
 import argparse
+import sys
 from pathlib import Path
 
-# -----------------------------
-# CONFIG
-# -----------------------------
-PROJECT_ROOT = Path(__file__).parent.parent
-DATA_PATH = PROJECT_ROOT / "data" / "processed" / "merged_cleaned.csv"
-CONFIG_PATH = PROJECT_ROOT / "configs" / "selected_features.json"
-META_PATH = PROJECT_ROOT / "models" / "preprocessing_metadata.json"
+from src.core.paths import PROCESSED_DATA_DIR, CONFIGS_DIR, MODELS_DIR
+
+DATA_PATH = PROCESSED_DATA_DIR / "merged_cleaned.csv"
+CONFIG_PATH = CONFIGS_DIR / "selected_features.json"
+META_PATH = MODELS_DIR / "preprocessing_metadata.json"
 
 def get_fallback_payload(selected_features):
     """

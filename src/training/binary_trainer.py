@@ -42,6 +42,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from skl2onnx import to_onnx
 
 from src.features.preprocessor import load_splits
 
@@ -310,6 +311,16 @@ def train_binary_classifier(
     logger.info("Saved base model → %s", base_model_path)
     logger.info("Saved calibrated model → %s", calib_model_path)
     logger.info("Saved feature names → %s", features_path)
+
+    # ---- export to ONNX (base model only for high-speed inference) ----
+    try:
+        onx = to_onnx(model, x_train[:1].to_numpy(dtype=np.float32))
+        onnx_path = model_dir / "base_binary_model.onnx"
+        with open(onnx_path, "wb") as f:
+            f.write(onx.SerializeToString())
+        logger.info("Exported base model to ONNX → %s", onnx_path)
+    except Exception as e:
+        logger.error("Failed to export binary model to ONNX: %s", e)
 
     # ---- build feature importance table -----------------------------
     importance_df = pd.Series(

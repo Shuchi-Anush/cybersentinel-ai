@@ -10,15 +10,10 @@ Multi-page layout: pages are auto-discovered from src/dashboard/pages/.
 """
 
 import os
-import sys
 import time
-from pathlib import Path
-
-# ✅ MUST come before any src imports
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-
 import streamlit as st
 from src.dashboard.api_client import get_api
+
 # ------------------------------------------------------------------
 # Page config (must be first Streamlit call)
 # ------------------------------------------------------------------
@@ -31,6 +26,56 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------------
+# State Fetching (Source of Truth)
+# ------------------------------------------------------------------
+
+api = get_api()
+
+try:
+    health = api.health()
+    api_online = True
+except Exception:
+    health = {}
+    api_online = False
+
+# ------------------------------------------------------------------
+# NON-BLOCKING POLLING LOOP
+# ------------------------------------------------------------------
+
+now = time.time()
+
+if "last_poll" not in st.session_state:
+    st.session_state.last_poll = now
+
+pipeline_ready = health.get("pipeline_ready", False)
+pipeline_error = health.get("pipeline_error")
+
+if api_online and not pipeline_ready and pipeline_error is None:
+    if now - st.session_state.last_poll > 2:
+        st.session_state.last_poll = now
+        st.rerun()
+
+# ------------------------------------------------------------------
+# STATUS MAPPING
+# ------------------------------------------------------------------
+
+if not api_online:
+    pipeline_status = "🔴 Offline"
+elif pipeline_error is not None:
+    pipeline_status = "🔴 Error"
+elif pipeline_ready:
+    pipeline_status = "🟢 Online"
+else:
+    pipeline_status = "🟡 Loading"
+
+meta_ready = health.get("meta_ready", False)
+
+if not api_online:
+    metadata_status = "🔴 Offline"
+else:
+    metadata_status = "🟢 Available" if meta_ready else "🔴 Missing"
+
+# ------------------------------------------------------------------
 # Sidebar branding
 # ------------------------------------------------------------------
 
@@ -40,8 +85,7 @@ with st.sidebar:
     st.divider()
 
     # API connection status
-    api = get_api()
-    if api.is_reachable():
+    if api_online:
         st.success("API Connected", icon="✅")
     else:
         st.error("API Unreachable", icon="🔴")
@@ -51,10 +95,14 @@ with st.sidebar:
             f"**Target:** `{api.base_url}`"
         )
 
-    auto_refresh = st.checkbox("🔄 Auto Refresh (10s)", value=False, help="Automatically refresh the dashboard every 10 seconds.")
-    if auto_refresh:
-        time.sleep(10)
-        st.rerun()
+    # Use session_state to avoid blocking time.sleep
+    if "last_refresh" not in st.session_state:
+        st.session_state.last_refresh = now
+
+    if st.checkbox("🔄 Auto Refresh (5s)", value=False, help="Automatically refresh the dashboard every 5 seconds."):
+        if now - st.session_state.last_refresh > 5:
+            st.session_state.last_refresh = now
+            st.rerun()
 
     st.divider()
     st.caption("© 2026 CyberSentinel ML-LAB")
@@ -68,20 +116,24 @@ with st.sidebar:
 st.title("🛡️ CyberSentinel AI Dashboard")
 st.markdown("> **Real-time intrusion detection with policy-driven response**")
 
-# Quick status metrics row (Requirement A)
-api = get_api()
-health = api.health()
-models = api.get_models()
+if pipeline_status == "🟡 Loading":
+    st.info("Model is loading in background (~40–60s)")
 
+if pipeline_error is not None:
+    st.error(f"Pipeline Error: {str(pipeline_error)[:100]}")
+
+# Quick status metrics row
 col1, col2, col3 = st.columns(3)
 with col1:
-    status = "🟢 Online" if "error" not in health and health.get("status") == "ok" else "🔴 Offline"
-    st.metric("API Status", status)
+    st.metric("API Status", "🟢 Online" if api_online else "🔴 Offline")
 with col2:
-    pipeline = "🟢 Loaded" if health.get("pipeline_loaded") else "🔴 Missing"
-    st.metric("Inference Pipeline", pipeline)
+    st.metric("Inference Pipeline", pipeline_status)
 with col3:
-    n_classes = models.get("multiclass", {}).get("num_classes", "0")
+    try:
+        models = api.get_models() if api_online else {}
+        n_classes = models.get("multiclass", {}).get("num_classes", "0")
+    except:
+        n_classes = "N/A"
     st.metric("Attack Classes", n_classes)
 
 st.divider()
@@ -100,5 +152,3 @@ st.markdown(
     | **Policy** | Active firewall policy rules |
     """
 )
-
-# Cleaned up redundant status cards block

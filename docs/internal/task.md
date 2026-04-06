@@ -1,0 +1,23 @@
+- [x] **Phase 1: Clean Environment Reproduction**
+    - [x] Stop any active background processes
+    - [x] Delete existing `venv/`
+    - [x] Create new `venv/` (`python -m venv venv`)
+    - [x] Install dependencies (`pip install -r requirements.txt`)
+    - [x] Verify environment binaries (`uvicorn`, `pytest`, `streamlit`)
+- [/] **Phase 2: Full Dataset Pipeline Verification**
+    - [/] Execute Full Training Pipeline (`python -m src.training.train_pipeline`)
+    - [ ] Verify Model Persistence in `models/`
+    - [ ] Execute Inference Verification (`python -m src.inference.inference_pipeline --sample 5`)
+- [ ] **Phase 3: API Resilience & Stress Validation**
+    - [ ] Start production API server
+    - [ ] Verify basic endpoints (`/health`, `/meta/features`, `/predict`)
+    - [ ] Execute API Stress Test (Missing keys, empty objects, schema violations)
+- [ ] **Phase 4: Dynamic Scenario Reconstruction**
+    - [ ] Wipe `artifacts/scenarios/`
+    - [ ] Regenerate Scenario Candidates
+    - [ ] Deterministically Validate Scenarios against Live API
+- [ ] **Phase 5: Final Test Sweep**
+    - [ ] Execute full `pytest tests/` (100% PASS requirement)
+- [ ] **Phase 6: Repository Hygiene Audit**
+    - [ ] Verify structure and file locations
+    - [ ] Final Status Reporting

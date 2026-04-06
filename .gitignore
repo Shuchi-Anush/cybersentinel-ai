@@ -1,46 +1,15 @@
-# ===============================
 # Python
-# ===============================
 venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
-*.pyc
+.coverage
+htmlcov/
 
-# ===============================
 # Environment
-# ===============================
 .env
 
-# ===============================
-# Models
-# ===============================
-*.pkl
-*.parquet
-
-models/*
-!models/.gitkeep
-
-# ===============================
-# Logs
-# ===============================
-*.log
-logs/*
-!logs/.gitkeep
-
-# ===============================
-# Artifacts / outputs
-# ===============================
-artifacts/*
-!artifacts/.gitkeep
-
-outputs/*
-!outputs/.gitkeep
-
-# ===============================
-# Data
-# ===============================
-
-# Ignore actual datasets
+# Data (keep structure, ignore content)
 data/raw/*
 !data/raw/*.dvc
 !data/raw/.gitkeep
@@ -49,41 +18,35 @@ data/processed/*
 !data/processed/*.dvc
 !data/processed/.gitkeep
 
-# ===============================
+# Models (keep structure only)
+models/*
+!models/.gitkeep
+
+# Artifacts (keep structure only)
+artifacts/*
+!artifacts/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+
 # MLflow
-# ===============================
-mlflow.db
 mlruns/*
 !mlruns/.gitkeep
+mlflow.db
 
-# ===============================
-# Jupyter
-# ===============================
-notebooks/.ipynb_checkpoints/
-notebooks/**/.ipynb_checkpoints/
-
-# tests:
-tests/__pycache__/
-
-# ===============================
-# OS / Editor
-# ===============================
+# OS / IDE
 .DS_Store
 Thumbs.db
 .vscode/
-
-# ===============================
-# Databases
-# ===============================
-*.db
-*.sqlite3
+.idea/
 
 # Lint / debug
-ruff_errors.json
-ruff_errors2.json
-
+ruff_errors*.json
 *.tmp
-*.json
-!configs/*.json
-*.onnx
-htmlcov/
+
+# IMPORTANT: DO NOT ignore all JSON
+# configs/*.json must be tracked
+
+outputs/*
+!outputs/.gitkeep

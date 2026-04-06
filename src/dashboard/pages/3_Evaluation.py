@@ -14,7 +14,13 @@ st.header("📈 Evaluation")
 
 api = get_api()
 
-if not api.is_reachable():
+try:
+    health = api.health()
+    api_online = True
+except Exception:
+    api_online = False
+
+if not api_online:
     st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
@@ -183,162 +189,166 @@ with tab_mc:
 st.divider()
 st.subheader("Holdout Data Evaluation")
 eval_data = api.get_eval()
-
-if not eval_data:
-    st.warning(
-        "⚠️ No held-out evaluation report found. "
-        "Run the pipeline evaluation stage to generate full test-set metrics:\n\n"
-        "```\nvenv\\Scripts\\python -m src.pipeline.pipeline_runner --eval-only\n```"
-    )
+if not eval_data or eval_data.get("status") == "missing":
+    st.warning("⚠️ Held-out evaluation data unavailable. Run the pipeline first.")
+    bin_eval = {}
+    mc_eval = {}
 else:
     st.success("✅ Held-out Evaluation Report Found")
-
+    # Handle the new contract {f1_macro, status} or fallback to deep access
     bin_eval = eval_data.get("binary", {})
     mc_eval = eval_data.get("multiclass", {})
+    if not mc_eval and "f1_macro" in eval_data:
+         mc_eval = eval_data # The eval_data is the summary now
+         bin_eval = {}
+         
+# Ensure mc_eval is a dict to avoid NameError/AttributeError downstream
+mc_eval = mc_eval if isinstance(mc_eval, dict) else {}
+bin_eval = bin_eval if isinstance(bin_eval, dict) else {}
 
-    col_ebin, col_emc = st.columns(2)
+col_ebin, col_emc = st.columns(2)
 
-    with col_ebin:
-        st.markdown("#### Binary Model Test Metrics")
-        m1, m2 = st.columns(2)
-        m1.metric("Accuracy", fmt(bin_eval.get("accuracy")))
-        m2.metric("ROC-AUC", fmt(bin_eval.get("roc_auc")))
+with col_ebin:
+    st.markdown("#### Binary Model Test Metrics")
+    m1, m2 = st.columns(2)
+    m1.metric("Accuracy", fmt(bin_eval.get("accuracy")))
+    m2.metric("ROC-AUC", fmt(bin_eval.get("roc_auc")))
 
-    with col_emc:
-        st.markdown("#### Multiclass Model Test Metrics")
-        m1, m2 = st.columns(2)
-        m1.metric("Accuracy", fmt(mc_eval.get("accuracy")))
-        m2.metric("F1 (macro)", fmt(mc_eval.get("f1_macro")))
+with col_emc:
+    st.markdown("#### Multiclass Model Test Metrics")
+    m1, m2 = st.columns(2)
+    m1.metric("Accuracy", fmt(mc_eval.get("accuracy")))
+    m2.metric("F1 (macro)", fmt(mc_eval.get("f1_macro")))
 
-    # --------------------------------------------------------------
-    # Per-Class Metrics
-    # --------------------------------------------------------------
-    roc_per_class = mc_eval.get("roc_auc_per_class", {})
-    ap_per_class = mc_eval.get("average_precision_per_class", {})
+# --------------------------------------------------------------
+# Per-Class Metrics
+# --------------------------------------------------------------
+roc_per_class = mc_eval.get("roc_auc_per_class", {})
+ap_per_class = mc_eval.get("average_precision_per_class", {})
 
-    if roc_per_class and ap_per_class:
-        st.subheader("📊 Per-Class Performance")
+if roc_per_class and ap_per_class:
+    st.subheader("📊 Per-Class Performance")
 
-        # Merge lists into DataFrame
-        classes = list(roc_per_class.keys())
-        class_df = pd.DataFrame(
-            {
-                "Class": classes,
-                "ROC-AUC": [roc_per_class.get(c, 0.0) for c in classes],
-                "Average Precision": [ap_per_class.get(c, 0.0) for c in classes],
-            }
+    # Merge lists into DataFrame
+    classes = list(roc_per_class.keys())
+    class_df = pd.DataFrame(
+        {
+            "Class": classes,
+            "ROC-AUC": [roc_per_class.get(c, 0.0) for c in classes],
+            "Average Precision": [ap_per_class.get(c, 0.0) for c in classes],
+        }
+    )
+
+    # Sort by ROC-AUC before displaying table
+    class_df = class_df.sort_values("ROC-AUC", ascending=False)
+
+    # Display Table and Chart side-by-side
+    pc1, pc2 = st.columns(2)
+    with pc1:
+        st.markdown("**Performance Table**")
+        st.dataframe(class_df, width="stretch", hide_index=True)
+
+    with pc2:
+        st.markdown("**ROC-AUC Bar Chart**")
+        st.bar_chart(
+            class_df.set_index("Class")["ROC-AUC"], width="stretch"
         )
 
-        # Sort by ROC-AUC before displaying table
-        class_df = class_df.sort_values("ROC-AUC", ascending=False)
+    # Highlight weakest classes
+    weakest = class_df.sort_values(["Average Precision", "ROC-AUC"]).head(3)
 
-        # Display Table and Chart side-by-side
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            st.markdown("**Performance Table**")
-            st.dataframe(class_df, width="stretch", hide_index=True)
+    low_ap_classes = class_df[class_df["Average Precision"] < 0.9]
 
-        with pc2:
-            st.markdown("**ROC-AUC Bar Chart**")
-            st.bar_chart(
-                class_df.set_index("Class")["ROC-AUC"], width="stretch"
-            )
+    weakest_labels = weakest["Class"].tolist()
+    st.warning(
+        f"⚠️ **Needs Attention!** The models showed the weakest performance against "
+        f"the following 3 classes: `{', '.join(weakest_labels)}`."
+    )
 
-        # Highlight weakest classes
-        weakest = class_df.sort_values(["Average Precision", "ROC-AUC"]).head(3)
-
-        low_ap_classes = class_df[class_df["Average Precision"] < 0.9]
-
-        weakest_labels = weakest["Class"].tolist()
+    if not low_ap_classes.empty:
         st.warning(
-            f"⚠️ **Needs Attention!** The models showed the weakest performance against "
-            f"the following 3 classes: `{', '.join(weakest_labels)}`."
+            f"⚠️ Classes with low Average Precision (<0.90): "
+            f"{', '.join(low_ap_classes['Class'].tolist())}"
         )
 
-        if not low_ap_classes.empty:
-            st.warning(
-                f"⚠️ Classes with low Average Precision (<0.90): "
-                f"{', '.join(low_ap_classes['Class'].tolist())}"
-            )
+    st.divider()
+    st.subheader("🧠 Model Insight")
 
-        st.divider()
-        st.subheader("🧠 Model Insight")
+    mc_f1 = mc_eval.get("f1_macro", 0.0)
+    mc_roc = mc_eval.get("roc_auc_macro", 0.0)
+    mc_f1_w = mc_eval.get("f1_weighted", 0.0)
 
-        mc_f1 = mc_eval.get("f1_macro", 0.0)
-        mc_roc = mc_eval.get("roc_auc_macro", 0.0)
-        mc_f1_w = mc_eval.get("f1_weighted", 0.0)
+    # Separation Quality
+    if mc_roc >= 0.95:
+        st.success(
+            f"🌟 **Strong Separation (ROC-AUC {mc_roc:.3f}):** The multiclass baseline effectively distinguishes most attack signatures with high confidence."
+        )
+    elif mc_roc >= 0.80:
+        st.info(
+            f"✅ **Adequate Separation (ROC-AUC {mc_roc:.3f}):** The model generally identifies attack boundaries, though overlapping signatures exist."
+        )
+    elif mc_roc > 0.0:
+        st.warning(
+            f"⚠️ **Weak Separation (ROC-AUC {mc_roc:.3f}):** The model struggles to separate classes robustly, leading to misclassifications."
+        )
 
-        # Separation Quality
-        if mc_roc >= 0.95:
-            st.success(
-                f"🌟 **Strong Separation (ROC-AUC {mc_roc:.3f}):** The multiclass baseline effectively distinguishes most attack signatures with high confidence."
-            )
-        elif mc_roc >= 0.80:
-            st.info(
-                f"✅ **Adequate Separation (ROC-AUC {mc_roc:.3f}):** The model generally identifies attack boundaries, though overlapping signatures exist."
-            )
-        elif mc_roc > 0.0:
-            st.warning(
-                f"⚠️ **Weak Separation (ROC-AUC {mc_roc:.3f}):** The model struggles to separate classes robustly, leading to misclassifications."
-            )
+    # Imbalance penalty
+    f1_gap = mc_f1_w - mc_f1
+    if mc_f1 > 0 and f1_gap > 0.10:
+        st.warning(
+            f"⚖️ **Imbalance Penalty:** Macro F1 (`{mc_f1:.3f}`) is significantly lower than Weighted F1 (`{mc_f1_w:.3f}`). "
+            "This performance gap indicates that severe class imbalance drags down accuracy on rare minority attacks."
+        )
+    elif mc_f1 > 0:
+        st.success(
+            f"⚖️ **Balanced Accuracy:** The narrow gap between Macro F1 (`{mc_f1:.3f}`) and Weighted F1 (`{mc_f1_w:.3f}`) "
+            "indicates the model effectively counters major class imbalance artifacts."
+        )
 
-        # Imbalance penalty
-        f1_gap = mc_f1_w - mc_f1
-        if mc_f1 > 0 and f1_gap > 0.10:
-            st.warning(
-                f"⚖️ **Imbalance Penalty:** Macro F1 (`{mc_f1:.3f}`) is significantly lower than Weighted F1 (`{mc_f1_w:.3f}`). "
-                "This performance gap indicates that severe class imbalance drags down accuracy on rare minority attacks."
-            )
-        elif mc_f1 > 0:
-            st.success(
-                f"⚖️ **Balanced Accuracy:** The narrow gap between Macro F1 (`{mc_f1:.3f}`) and Weighted F1 (`{mc_f1_w:.3f}`) "
-                "indicates the model effectively counters major class imbalance artifacts."
-            )
+    # Precision-Recall context
+    if not low_ap_classes.empty:
+        weakest_str = ", ".join(low_ap_classes["Class"].head(3).tolist())
+        st.error(
+            f"🚨 **Precision vs Recall Gap:** Classes like `{weakest_str}` suffer from low Average Precision (<0.90). "
+            "This indicates a severe precision-recall tradeoff—the model either misses these attacks (low recall) or guesses them too often (causing false positives)."
+        )
+    else:
+        st.success(
+            "🎯 **Robust Precision-Recall:** All classes maintain high Average Precision. The model effectively scales its decision boundaries without falling into false-positive volume traps."
+        )
 
-        # Precision-Recall context
-        if not low_ap_classes.empty:
-            weakest_str = ", ".join(low_ap_classes["Class"].head(3).tolist())
-            st.error(
-                f"🚨 **Precision vs Recall Gap:** Classes like `{weakest_str}` suffer from low Average Precision (<0.90). "
-                "This indicates a severe precision-recall tradeoff—the model either misses these attacks (low recall) or guesses them too often (causing false positives)."
-            )
+# --------------------------------------------------------------
+# Confusion Matrix Visualization
+# --------------------------------------------------------------
+cm = mc_eval.get("confusion_matrix")
+cm_classes = mc_eval.get("attack_classes", [])
+
+if cm and cm_classes and len(cm) == len(cm_classes):
+    st.divider()
+    st.subheader("🧩 Confusion Matrix")
+    st.caption("Rows: Actual Class | Columns: Predicted Class")
+
+    cm_df = pd.DataFrame(cm, index=cm_classes, columns=cm_classes)
+
+    normalize = st.checkbox("Normalize Confusion Matrix")
+    if normalize:
+        # GUARD: sum of row must be > 0 to avoid division by zero
+        row_sums = cm_df.sum(axis=1)
+        if (row_sums > 0).all():
+            cm_df = cm_df.div(row_sums, axis=0)
+            st.caption("Normalized per row (percentage of actual class)")
         else:
-            st.success(
-                "🎯 **Robust Precision-Recall:** All classes maintain high Average Precision. The model effectively scales its decision boundaries without falling into false-positive volume traps."
-            )
+            st.warning("⚠️ Some classes have zero actual samples; skipping normalization.")
 
-    # --------------------------------------------------------------
-    # Confusion Matrix Visualization
-    # --------------------------------------------------------------
-    cm = mc_eval.get("confusion_matrix")
-    cm_classes = mc_eval.get("attack_classes", [])
+    # Apply a background gradient to mimic seaborn heatmap
+    st.dataframe(cm_df.style.background_gradient(cmap="Blues"), width="stretch")
+    st.caption(
+        "Diagonal = correct predictions. Off-diagonal = misclassifications. "
+        "Darker cells indicate higher frequency."
+    )
 
-    if cm and cm_classes and len(cm) == len(cm_classes):
-        st.divider()
-        st.subheader("🧩 Confusion Matrix")
-        st.caption("Rows: Actual Class | Columns: Predicted Class")
-
-        cm_df = pd.DataFrame(cm, index=cm_classes, columns=cm_classes)
-
-        normalize = st.checkbox("Normalize Confusion Matrix")
-        if normalize:
-            # GUARD: sum of row must be > 0 to avoid division by zero
-            row_sums = cm_df.sum(axis=1)
-            if (row_sums > 0).all():
-                cm_df = cm_df.div(row_sums, axis=0)
-                st.caption("Normalized per row (percentage of actual class)")
-            else:
-                st.warning("⚠️ Some classes have zero actual samples; skipping normalization.")
-
-        # Apply a background gradient to mimic seaborn heatmap
-        st.dataframe(cm_df.style.background_gradient(cmap="Blues"), width="stretch")
-        st.caption(
-            "Diagonal = correct predictions. Off-diagonal = misclassifications. "
-            "Darker cells indicate higher frequency."
-        )
-
-    with st.expander("🔧 Debug: Full Evaluation JSON"):
-        st.json(eval_data)
+with st.expander("🔧 Debug: Full Evaluation JSON"):
+    st.json(eval_data)
 
 # ------------------------------------------------------------------
 # Executive Summary

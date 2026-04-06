@@ -376,6 +376,19 @@ class PolicyMapper:
         print(f"\n  Default for unknown attack types: {self._default_attack_action}")
         print("=" * 55)
 
+    def apply_zero_trust(self, attack_type: Optional[str], trust_score: float, risk_level: str) -> str:
+        """
+        Final authority for policy decisions in Enterprise Zero-Trust mode.
+        """
+        if risk_level == "HIGH":
+            return "DENY"
+        elif risk_level == "MEDIUM":
+            return "QUARANTINE"
+        elif risk_level == "LOW" and attack_type and attack_type.upper() != "BENIGN":
+            return "MONITOR"
+        else:
+            return "ALLOW"
+
 
 # ------------------------------------------------------------------
 # Module-level convenience function

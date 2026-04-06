@@ -3,7 +3,7 @@
     "source_dataset": "merged_cleaned.csv",
     "initial_features": 78,
     "selected_count": 40,
-    "elapsed_seconds": 38.3,
+    "elapsed_seconds": 34.44,
     "config": {
       "variance_threshold": 0.01,
       "correlation_threshold": 0.95,

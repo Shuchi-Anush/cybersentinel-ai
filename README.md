@@ -8,298 +8,252 @@
 </p>
 
 <p align="center">
-  <b>From Network Traffic → To Security Decisions in Real-Time</b><br>
-  <sub>A Production-Grade Machine Learning Intrusion Detection System</sub>
+  <b>Zero-Trust Intrusion Detection & Decision System</b><br>
+  <sub>From Raw Network Traffic → Intelligent Security Actions in Real-Time</sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-success">
-  <img src="https://img.shields.io/badge/Python-3.10-blue">
-  <img src="https://img.shields.io/badge/FastAPI-High%20Performance-teal">
-  <img src="https://img.shields.io/badge/ML-End--to--End-green">
-  <img src="https://img.shields.io/badge/Docker-Ready-blue">
+  <img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Python-3.10-blue?style=for-the-badge">
+  <img src="https://img.shields.io/badge/FastAPI-High%20Performance-teal?style=for-the-badge">
+  <img src="https://img.shields.io/badge/ML-End--to--End-green?style=for-the-badge">
+  <img src="https://img.shields.io/badge/Zero--Trust-Enabled-red?style=for-the-badge">
 </p>
 
 ---
 
-## ⚡ 5-Second Pitch
+## ⚡ 5-Second Overview
 
-CyberSentinel-AI is not a model.
+CyberSentinel-AI is not just an IDS.
 
-It is a **real-time decision engine** that transforms raw network flows into:
+It is a **Zero-Trust Decision Engine** that converts network flows into:
 
-```text
-ALLOW  |  QUARANTINE  |  DENY
-```
+🟢 ALLOW  🟡 QUARANTINE  🔴 DENY
 
-— automatically, instantly, and at scale.
+— automatically, instantly, and intelligently.
 
 ---
 
-## 🧠 Problem → Solution
+## 🚨 Problem
 
-### ❌ Traditional Systems
+Traditional IDS systems:
 
-* Signature-based detection
-* Fail on zero-day attacks
-* Require manual intervention
-* High alert fatigue
-
-### ✅ CyberSentinel-AI
-
-* Behavioral ML detection
-* Detects unknown attack patterns
-* Fully automated response
-* Real-time policy enforcement
+- Detect threats but ❌ don’t enforce decisions  
+- Fail against ❌ zero-day attacks  
+- Require ❌ manual intervention  
+- Cause ❌ alert fatigue  
 
 ---
 
-## 🚀 What Makes This Different
+## 💡 Solution
 
-| Capability     | Typical ML Project | CyberSentinel-AI  |
-| -------------- | ------------------ | ----------------- |
-| Scope          | Model only         | Full ML system    |
-| Output         | Prediction         | Decision + Action |
-| Runtime        | Notebook           | Production API    |
-| Explainability | None               | Feature signals   |
-| Deployment     | Local              | Docker + API      |
-| UX             | None               | SOC Dashboard     |
+CyberSentinel-AI introduces a **closed-loop security system**:
+
+Detection → Trust Evaluation → Policy Enforcement → Action
 
 ---
 
-## 🏗️ System Thinking (Core Idea)
+## 🚀 Key Differentiation
 
-This system replaces:
-
-```text
-Detect → Alert → Human → Decide → Act
-```
-
-With:
-
-```text
-Detect → Classify → Decide → Act   (Fully Automated)
-```
-
----
-
-## 🔥 Real-World Scenario
-
-> Incoming traffic spike from unknown source
-
-1. Flow enters system
-2. Binary model detects anomaly
-3. Multiclass model identifies: **DoS slowloris**
-4. Policy engine evaluates risk
-5. System responds:
-
-```text
-🔴 DENY (Instant)
-```
-
-No human required.
+| Capability | Typical ML Project | CyberSentinel-AI |
+| ----------- | ----------------- | ------------------ |
+| Scope | Model only | Full system |
+| Output | Prediction | Decision + Action |
+| Intelligence | Static | Context-aware |
+| Runtime | Notebook | API + Dashboard |
+| Security | Detection | Zero-Trust Enforcement |
 
 ---
 
 ## 🏛️ Architecture
 
 <p align="center">
-  <img src="docs/assets/architecture.png" alt="Architecture" width="85%">
+  <img src="docs/assets/architecture.png" width="85%">
 </p>
 
 ---
 
 ## 🧠 Core Pipeline
 
-```text
-Input
- ↓
-Validation (Schema Guard)
- ↓
-Scaling (Precomputed)
- ↓
-Binary Detection (Benign vs Attack)
- ↓
-Multiclass Classification (Attack Type)
- ↓
-Policy Mapping
- ↓
-Action (ALLOW / QUARANTINE / DENY)
-```
+Network Flow Input  
+↓  
+Feature Validation (40 Features)  
+↓  
+Binary Classifier (Benign / Attack)  
+↓  
+Multi-class Classifier (Attack Type)  
+↓  
+Trust Engine (multi-signal)  
+↓  
+Policy Engine  
+↓  
+Final Decision → ALLOW / QUARANTINE / DENY  
 
 <p align="center">
-  <img src="docs/assets/pipeline.png" alt="Pipeline" width="85%">
+  <img src="docs/assets/pipeline.png" width="85%">
 </p>
 
 ---
 
-## 📊 Performance (Real Data)
+## 🧠 Zero-Trust Engine
 
-### Binary Model
+### 🔬 Trust Score Formula
 
-* Accuracy: **0.9983**
-* ROC-AUC: **0.9999**
+Trust Score = 0.5 × Confidence  
+      + 0.3 × Margin  
+      + 0.2 × Anomaly Signal  
 
-### Multiclass Model
+### 📊 Risk Mapping
 
-* Accuracy: **0.9976**
-* F1 (macro): **~0.89**
-* Classes: **14**
-
----
-
-## ⚙️ Production Characteristics
-
-* Stateless API (FastAPI)
-* Deterministic inference
-* Config-driven policies
-* ONNX-compatible pipeline
-* Safe input validation (Pydantic)
-* Zero random behavior in inference
+| Trust Score | Risk Level |
+| ----------- | ---------- |
+| ≥ 0.70 | 🟢 LOW |
+| 0.40 – 0.69 | 🟡 MEDIUM |
+| < 0.40 | 🔴 HIGH |
 
 ---
 
-## 🖥️ SOC Dashboard
+## 🛡️ Policy Engine (Decision Layer)
+
+| Prediction | Confidence | Action | Risk |
+| ---------- | ---------- | ------ | ---- |
+| Attack | ≥ 0.85 | 🔴 DENY | HIGH |
+| Attack | 0.60–0.84 | 🟡 QUARANTINE | HIGH |
+| Attack | < 0.60 | 🟡 QUARANTINE | MEDIUM |
+| Normal | ≥ 0.80 | 🟢 ALLOW | LOW |
+| Normal | < 0.80 | 🟡 QUARANTINE | MEDIUM |
+
+---
+
+## 🖥️ Dashboard (SOC Interface)
+
+Run:
+
+streamlit run src/dashboard/app.py
+
+### Features
+
+- ⚡ Threat Simulator  
+- 🔬 Manual flow testing  
+- 📁 Batch CSV analysis  
+- 📡 JSON input support  
+- 📊 Probability visualization  
+- 🧠 Explainable decisions  
 
 <p align="center">
   <img src="docs/assets/predict.png" width="80%">
 </p>
 
-<p align="center">
-  <img src="docs/assets/evaluation.png" width="80%">
-</p>
+---
 
-<p align="center">
-  <img src="docs/assets/policy.png" width="80%">
-</p>
+## 🔌 API Layer
+
+Run:
+
+uvicorn src.api.main:app --reload
+
+### Endpoints
+
+| Endpoint | Description |
+| -------- | ----------- |
+| /predict | Single flow decision |
+| /predict/batch | Batch decisions |
+| /meta/features | Feature schema |
+| /meta/models | Model metadata |
+| /meta/policy | Policy rules |
+| /health | Health check |
 
 ---
 
-## 🔬 Decision Intelligence
+## 📊 Example Response
 
-The system does not just predict.
-
-It provides:
-
-* Threat severity (Low / Medium / High)
-* Confidence scores
-* Attack type classification
-* Policy reasoning
-
----
-
-## ⚡ Quick Start
-
-### 1. Setup
-
-```bash
-git clone https://github.com/Shuchi-Anush/cybersentinel-ai.git
-cd cybersentinel-ai
-
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
----
-
-### 2. Train Pipeline
-
-```bash
-python -m src.pipeline.pipeline_runner
-```
-
----
-
-### 3. Start API
-
-```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-```
-
----
-
-### 4. Launch Dashboard
-
-```bash
-streamlit run src/dashboard/app.py
-```
-
----
-
-## 🐳 Docker Deployment
-
-```bash
-docker build -t cybersentinel-ai .
-
-docker run -p 8000:8000 \
-  -v $(pwd)/models:/app/models \
-  cybersentinel-ai
-```
-
----
-
-## 📡 API Example
-
-### Request
-
-```json
-POST /predict
 {
-  "features": {
-    "Flow Duration": 128941,
-    "Total Fwd Packets": 4
+  "prediction": "Attack",
+  "attack_type": "DDoS",
+  "action": "DENY",
+  "confidence": 0.9985,
+  "margin": 0.91,
+  "attack_proba": {
+    "DDoS": 0.998,
+    "PortScan": 0.001
+  },
+  "trust": {
+    "trust_score": 0.94,
+    "risk_level": "HIGH"
   }
 }
-```
-
-### Response
-
-```json
-{
-  "action": "DENY",
-  "confidence": 0.98,
-  "attack_type": "DoS slowloris"
-}
-```
 
 ---
 
-## 📁 Clean Architecture
+## 📁 Project Structure
 
-```text
-src/
-├── features/      # Preprocessing & feature selection
-├── training/      # ML models (binary + multiclass)
-├── inference/     # Prediction pipeline
-├── policy/        # Decision logic
-├── api/           # FastAPI service
-├── dashboard/     # Streamlit SOC UI
-```
+cybersentinel-ai/  
+├── src/  
+│   ├── api/  
+│   ├── core/  
+│   ├── inference/  
+│   ├── dashboard/  
+├── configs/  
+├── artifacts/  
+├── models/ (ignored)  
+├── data/ (ignored)  
+├── docs/  
 
 ---
 
-## 🧩 Key Insight
+## 🎯 Scenario Pipeline
 
-Most projects stop at prediction.
+python -m scripts.scenario_extractor  
+python -m scripts.scenario_validator  
 
-CyberSentinel-AI goes further:
+✔ Data-driven  
+✔ No hardcoding  
+✔ Model validated  
 
-```text
-Prediction → Decision → Action
-```
+---
 
-That is the difference between a model and a **system**.
+## 🧪 Testing
+
+pytest tests/ --tb=short  
+
+---
+
+## 🐳 Docker
+
+docker build -t cybersentinel-ai .  
+docker run -p 8000:8000 cybersentinel-ai  
+
+---
+
+## 🔐 Design Principles
+
+- Modular architecture  
+- Config-driven system  
+- No hardcoded paths  
+- Production-first design  
+- Explainable AI  
+
+---
+
+## 🚀 Key Insight
+
+Prediction → Trust → Decision → Action
 
 ---
 
 ## 👨‍💻 Author
 
-**Shuchi Anush S**
-🔗 [https://github.com/Shuchi-Anush](https://github.com/Shuchi-Anush)
+Shuchi Anush S  
+<https://github.com/Shuchi-Anush>  
 
 ---
 
 ## 📜 License
 
-MIT License
+MIT License  
+
+---
+
+## 🏁 Status
+
+✅ Production Ready

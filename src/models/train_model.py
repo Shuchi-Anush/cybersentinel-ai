@@ -7,7 +7,7 @@ import mlflow
 import mlflow.sklearn
 import pandas as pd
 
-from src.core.paths import DATA_DIR
+from src.core.paths import PROCESSED_DATA_DIR
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -27,7 +27,8 @@ def train():
         # -----------------------------
         # Load processed dataset
         # -----------------------------
-        df = pd.read_csv(DATA_DIR / "processed" / "processed_data.csv")
+        data_path = PROCESSED_DATA_DIR / "merged_cleaned.csv"
+        df = pd.read_csv(data_path)
 
         X = df.drop("Label", axis=1)
         y = df["Label"]

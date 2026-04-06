@@ -8,12 +8,13 @@ Uses the InferencePipeline loaded at startup via main.py lifespan.
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from typing import List
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import logging
 
-from src.api.schemas import FlowRequest, FlowBatchRequest, PredictResponse
+from src.api.schemas import FlowRequest as PredictRequest, FlowBatchRequest
+from fastapi import Request
 
 router = APIRouter()
 logger = logging.getLogger("api_routes")
@@ -23,37 +24,51 @@ logger = logging.getLogger("api_routes")
 executor = ThreadPoolExecutor(max_workers=4)
 
 
-def _get_pipeline():
-    """Retrieve the startup-loaded pipeline from main.py."""
-    from src.api.main import pipeline
+def _get_pipeline(request: Request):
+    """Retrieve the startup-loaded pipeline from app state."""
+    # Strict Guard: check for error first
+    pipe_err = getattr(request.app.state, "pipeline_error", None)
+    if pipe_err:
+        logger.error(f"Prediction blocked: Pipeline failed to load previously: {pipe_err}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Model failed to load: {pipe_err[:500]}"
+        )
 
-    if pipeline is None:
+    pipe = getattr(request.app.state, "pipeline", None)
+    if pipe is None:
+        logger.warning("Prediction requested but pipeline still loading.")
         raise HTTPException(
             status_code=503,
-            detail="InferencePipeline not loaded yet. Server is still starting.",
+            detail="Model loading in progress. Retry shortly.",
         )
-    return pipeline
+    return pipe
 
 
 @router.post(
     "/predict",
-    response_model=PredictResponse,
     summary="Predict policy action for a single flow",
 )
-async def predict_flow(request: FlowRequest):
+async def predict_flow(request_data: PredictRequest, request: Request):
     """
     Run the full inference cascade on a single network flow and return
     a policy decision (ALLOW / QUARANTINE / DENY).
     """
+    # We call _get_pipeline at the start to ensure 500 (error) or 503 (loading)
+    pipe = _get_pipeline(request)
+
     try:
         logger.info("Starting single flow prediction.")
-        pipe = _get_pipeline()
         loop = asyncio.get_running_loop()
-        decision = await loop.run_in_executor(
-            executor, pipe.predict_one, request.features
+        prediction_output = await loop.run_in_executor(
+            executor, pipe.predict_one, request_data.features
         )
+        
+        # Guard for object vs dict (Requirement 8)
+        if hasattr(prediction_output, "__dict__") and not isinstance(prediction_output, dict):
+            prediction_output = prediction_output.__dict__
         logger.info("Single flow prediction completed.")
-        return decision.to_dict()
+        return prediction_output
     except HTTPException:
         logger.error("HTTPException during single flow prediction.")
         raise
@@ -64,27 +79,28 @@ async def predict_flow(request: FlowRequest):
 
 @router.post(
     "/predict/batch",
-    response_model=List[PredictResponse],
     summary="Predict policy actions for a batch of flows",
 )
-async def predict_batch_flows(request: FlowBatchRequest):
+async def predict_batch_flows(request_data: FlowBatchRequest, request: Request):
     """
     Run the full inference cascade on a batch of network flows.
     Returns a list of policy decisions.
     """
+    # We call _get_pipeline at the start to ensure 500 (error) or 503 (loading)
+    pipe = _get_pipeline(request)
+
     try:
-        if not request.flows:
+        if not request_data.flows:
             return []
 
-        logger.info(f"Starting batch prediction for {len(request.flows)} flows.")
-        pipe = _get_pipeline()
-        df = pd.DataFrame(request.flows)
+        logger.info(f"Starting batch prediction for {len(request_data.flows)} flows.")
+        df = pd.DataFrame(request_data.flows)
         loop = asyncio.get_running_loop()
         decisions = await loop.run_in_executor(
             executor, pipe.predict, df
         )
         logger.info("Batch prediction completed.")
-        return [d.to_dict() for d in decisions]
+        return decisions
     except HTTPException:
         logger.error("HTTPException during batch prediction.")
         raise

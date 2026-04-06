@@ -8,15 +8,19 @@ import subprocess
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from payload_factory import PayloadFactory
+from tests.payload_factory import PayloadFactory
 
 # ------------------------------------------------------------------
 # CONFIG
 # ------------------------------------------------------------------
+from src.core.paths import TESTING_ARTIFACTS_DIR
+
 BASE_URL = "http://127.0.0.1:8081"
 CONCURRENCY = 100
 DURATION = 300 # 5 minutes
-REPORT_FILE = "memory_soak_report.json"
+
+TESTING_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+REPORT_FILE = TESTING_ARTIFACTS_DIR / "memory_soak_report.json"
 
 class SoakOrchestrator:
     def __init__(self):

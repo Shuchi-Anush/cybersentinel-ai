@@ -14,7 +14,13 @@ st.header("🛡️ Policy Rules")
 
 api = get_api()
 
-if not api.is_reachable():
+try:
+    health = api.health()
+    api_online = True
+except Exception:
+    api_online = False
+
+if not api_online:
     st.error("⚠️ API not reachable. Run API server first.")
     st.stop()
 
