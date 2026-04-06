@@ -72,32 +72,17 @@ class InferencePipeline:
     """
     End-to-end inference pipeline for CyberSentinel-AI.
 
-    Loads all trained artifacts once at instantiation, then exposes
-    ``predict()`` (batch) and ``predict_one()`` (single-row) methods.
+    Instantiation is side-effect free. Call ``load()`` to load artifacts
+    from disk before calling ``predict()`` or ``predict_one()``.
 
     Parameters
     ----------
     features_path : Path, optional
-        Path to selected_features.json.  Auto-resolved if not given.
     scaler_path : Path, optional
-        Path to scaler.pkl.  Auto-resolved if not given.
     binary_model_dir : Path, optional
-        Directory containing the binary model.pkl.
     multiclass_model_dir : Path, optional
-        Directory containing the multi-class model.pkl + label_encoder.pkl.
     policy_config_path : Path, optional
-        Path to policy.yaml.  Auto-resolved if not given.
     binary_threshold : float
-        Probability threshold above which a flow is classified as Attack.
-        Default 0.5.  Lower to reduce false negatives; raise to cut false positives.
-
-    Examples
-    --------
-    >>> pipeline = InferencePipeline()
-    >>> df = pd.read_csv("new_flows.csv")
-    >>> decisions = pipeline.predict(df)
-    >>> for d in decisions:
-    ...     print(d)
     """
 
     def __init__(
@@ -109,26 +94,48 @@ class InferencePipeline:
         policy_config_path: Optional[Path] = None,
         binary_threshold: float = 0.3,
     ) -> None:
+        # Store parameters — no filesystem access here
+        self._features_path = features_path
+        self._scaler_path = scaler_path
+        self._binary_model_dir = binary_model_dir
+        self._multiclass_model_dir = multiclass_model_dir
+        self._policy_config_path = policy_config_path
+        self._threshold = float(os.getenv("BINARY_THRESHOLD", binary_threshold))
+
+        # Model attributes — populated by load()
+        self._features: list[str] = []
+        self._scaler = None
+        self._binary_sess = None
+        self._mc_sess = None
+        self._calibrated_binary = None
+        self._encoder = None
+        self._policy = None
+        self.mean = None
+        self.scale = None
+        self._loaded = False
+
+    def load(self) -> None:
+        """Load all ML artifacts from disk. Must be called before predict()."""
+        if self._loaded:
+            return
+
         t0 = time.time()
         logger.info("Loading inference artifacts…")
 
-        self._threshold = float(os.getenv("BINARY_THRESHOLD", binary_threshold))
-        
-        # 1. Single Source of Truth Validation (CRITICAL)
-        # Enforce metadata.json as canonical. Fail-fast if models/binary/features.pkl differs.
         import json
+        import onnxruntime as rt
+
         meta_path = MODELS_DIR / "binary" / "metadata.json"
-        
         try:
             with open(meta_path, "r") as f:
                 meta_json = json.load(f)
                 json_features = meta_json.get("data", {}).get("features", [])
         except Exception as e:
-            logger.error(f"Failed to load canonical metadata.json: {e}")
+            logger.error("Failed to load canonical metadata.json: %s", e)
             raise
 
-        self._features: list[str] = joblib.load(MODELS_DIR / "binary" / "features.pkl")
-        
+        self._features = joblib.load(MODELS_DIR / "binary" / "features.pkl")
+
         if json_features != self._features:
             error_msg = (
                 f"CRITICAL: Feature mismatch! "
@@ -138,23 +145,24 @@ class InferencePipeline:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        self._scaler = load_scaler(scaler_path)
-        import onnxruntime as rt
-        
+        self._scaler = load_scaler(self._scaler_path)
+
         self._binary_sess = rt.InferenceSession(
             str(MODELS_DIR / "binary" / "base_binary_model.onnx"),
-            providers=["CPUExecutionProvider"]
+            providers=["CPUExecutionProvider"],
         )
         self._mc_sess = rt.InferenceSession(
             str(MODELS_DIR / "multiclass" / "multiclass_model.onnx"),
-            providers=["CPUExecutionProvider"]
+            providers=["CPUExecutionProvider"],
         )
-        # Note: ONNX used for speed, sklearn model used for calibrated probabilities
-        self._calibrated_binary = joblib.load(MODELS_DIR / "binary" / "calibrated_binary_model.pkl")
+        self._calibrated_binary = joblib.load(
+            MODELS_DIR / "binary" / "calibrated_binary_model.pkl"
+        )
         self.mean = self._scaler.mean_
         self.scale = self._scaler.scale_
-        _, self._encoder = load_multiclass_model(multiclass_model_dir)
-        self._policy = PolicyMapper(policy_config_path)
+        _, self._encoder = load_multiclass_model(self._multiclass_model_dir)
+        self._policy = PolicyMapper(self._policy_config_path)
+        self._loaded = True
 
         logger.info(
             "InferencePipeline ready — %d features  threshold=%.2f  (%.2fs)",

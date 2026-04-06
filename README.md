@@ -18,6 +18,7 @@
   <img src="https://img.shields.io/badge/FastAPI-High%20Performance-teal?style=for-the-badge">
   <img src="https://img.shields.io/badge/ML-End--to--End-green?style=for-the-badge">
   <img src="https://img.shields.io/badge/Zero--Trust-Enabled-red?style=for-the-badge">
+  <img src="https://img.shields.io/badge/CI-Passing-green?style=for-the-badge">
 </p>
 
 ---

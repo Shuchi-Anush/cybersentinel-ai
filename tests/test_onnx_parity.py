@@ -6,6 +6,14 @@ from pathlib import Path
 
 from src.core.paths import MODELS_DIR
 
+import os
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Skipping model-dependent tests in CI"
+)
+
 # Pytest fixture to load models
 @pytest.fixture(scope="module")
 def artifacts():

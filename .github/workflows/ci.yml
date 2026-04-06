@@ -45,10 +45,10 @@ jobs:
           python -c "from src.api.main import app; print('API import OK')"
           python -c "from src.inference.inference_pipeline import InferencePipeline; print('Pipeline import OK')"
 
-      # 🔹 Run tests (skip model-dependent ones)
+      # 🔹 Run tests (skip model-dependent ones via CI=true env)
       - name: Run Test Suite
         run: |
-          pytest tests/ --tb=short -q
+          pytest tests/ -vv --tb=long
 
       # 🔹 Lightweight API schema check
       - name: API Contract Check (No Model Load)

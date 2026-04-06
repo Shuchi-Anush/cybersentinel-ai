@@ -43,8 +43,9 @@ async def lifespan(app: FastAPI):
         try:
             logger.info("Starting background load: InferencePipeline")
             
-            # Use to_thread to prevent blocking the event loop during heavy init
-            temp_pipeline = await asyncio.to_thread(InferencePipeline)
+            # Use to_thread to prevent blocking the event loop during heavy load()
+            temp_pipeline = InferencePipeline()
+            await asyncio.to_thread(temp_pipeline.load)
             
             app.state.pipeline = temp_pipeline
             app.state.pipeline_ready = True

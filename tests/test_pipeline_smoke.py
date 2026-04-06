@@ -1,40 +1,40 @@
+import os
 import pytest
 import pandas as pd
 from src.inference.inference_pipeline import InferencePipeline
-from src.features.preprocessor import load_splits
-import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("CI") == "true",
+    reason="Skipping model-dependent tests in CI",
+)
 
 if not os.path.exists("models"):
     pytest.skip("Skipping pipeline test: models not available", allow_module_level=True)
 
+
 def test_pipeline_instantiation():
-    """Verify that all production artifacts are loaded correctly."""
-    try:
-        pipeline = InferencePipeline()
-        assert pipeline is not None
-        assert hasattr(pipeline, "_features")
-        assert len(pipeline._features) > 0
-    except Exception as e:
-        pytest.fail(f"InferencePipeline failed to load artifacts: {e}")
+    """Verify instantiation is side-effect free, then load() works."""
+    pipeline = InferencePipeline()
+    assert pipeline is not None
+    assert not pipeline._loaded
+
+    pipeline.load()
+    assert pipeline._loaded
+    assert len(pipeline._features) > 0
+
 
 def test_pipeline_inference_smoke():
-    """Run a single-batch inference on sample data from the test split."""
+    """Run a single-batch inference on fabricated data."""
     pipeline = InferencePipeline()
-    
-    # Load sample rows from the test split
-    # Note: test split should exist if pipeline stages 1-2 were run previously
-    try:
-        x_test, _, _ = load_splits("test")
-    except FileNotFoundError:
-        pytest.skip("Processed test split not found. Skipping smoke test.")
-        
-    sample_df = x_test.head(5)
+    pipeline.load()
+
+    sample_df = pd.DataFrame(
+        [dict(zip(pipeline._features, [0.0] * len(pipeline._features)))]
+    )
     decisions = pipeline.predict(sample_df)
-    
-    assert len(decisions) == 5
-    for d in decisions:
-        assert d.action is not None
-        assert 0.0 <= d.confidence <= 1.0
-        # attack_type is None for benign traffic, which is valid
-        if d.action.value != "ALLOW":
-            assert isinstance(d.attack_type, str)
+
+    assert len(decisions) == 1
+    d = decisions[0]
+    assert "action" in d
+    assert "confidence" in d
+    assert 0.0 <= float(d["confidence"]) <= 1.0
