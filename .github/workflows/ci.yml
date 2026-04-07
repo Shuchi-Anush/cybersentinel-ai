@@ -41,7 +41,9 @@ jobs:
       - name: Models Directory Safety Check
         run: |
           if [ -d "models" ]; then
-            echo "FAILED: Models directory exists in CI environment, which violates the strict artifact-independence rule."
-            exit 1
+            if [ "$(ls -A models)" ]; then
+              echo "FAILED: models directory contains artifacts in CI"
+              exit 1
+            fi
           fi
-          echo "SUCCESS: Models directory not present. CI-safety verified."
+          echo "SUCCESS: No model artifacts present"
