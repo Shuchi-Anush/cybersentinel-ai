@@ -94,7 +94,7 @@ class InferencePipeline:
         policy_config_path: Optional[Path] = None,
         binary_threshold: float = 0.3,
     ) -> None:
-        # Store parameters — no filesystem access here
+        # Store configuration only — ZERO disk/filesystem access in __init__
         self._features_path = features_path
         self._scaler_path = scaler_path
         self._binary_model_dir = binary_model_dir
@@ -102,7 +102,7 @@ class InferencePipeline:
         self._policy_config_path = policy_config_path
         self._threshold = float(os.getenv("BINARY_THRESHOLD", binary_threshold))
 
-        # Model attributes — populated by load()
+        # Internal model attributes — populated only by load()
         self._features: list[str] = []
         self._scaler = None
         self._binary_sess = None
@@ -115,9 +115,19 @@ class InferencePipeline:
         self._loaded = False
 
     def load(self) -> None:
-        """Load all ML artifacts from disk. Must be called before predict()."""
+        """
+        Load all ML artifacts and internal state from disk.
+        
+        STRICT RULES:
+        - NEVER call in CI (raises RuntimeError)
+        - ONLY called via lazy-loading in predict()
+        """
         if self._loaded:
             return
+
+        # HARD BLOCK in CI environment
+        if os.getenv("CI") == "true":
+            raise RuntimeError("Model loading disabled in CI")
 
         t0 = time.time()
         logger.info("Loading inference artifacts…")
@@ -125,6 +135,7 @@ class InferencePipeline:
         import json
         import onnxruntime as rt
 
+        # 1. Feature Definition validation
         meta_path = MODELS_DIR / "binary" / "metadata.json"
         try:
             with open(meta_path, "r") as f:
@@ -132,21 +143,19 @@ class InferencePipeline:
                 json_features = meta_json.get("data", {}).get("features", [])
         except Exception as e:
             logger.error("Failed to load canonical metadata.json: %s", e)
-            raise
+            raise FileNotFoundError(f"Canonical metadata.json missing: {e}")
 
+        # 2. Artifact loading
         self._features = joblib.load(MODELS_DIR / "binary" / "features.pkl")
-
         if json_features != self._features:
             error_msg = (
                 f"CRITICAL: Feature mismatch! "
-                f"metadata.json ({len(json_features)}) != features.pkl ({len(self._features)}). "
-                "Inconsistent retraining artifacts detected. Failing fast."
+                f"metadata.json ({len(json_features)}) != features.pkl ({len(self._features)})."
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
 
         self._scaler = load_scaler(self._scaler_path)
-
         self._binary_sess = rt.InferenceSession(
             str(MODELS_DIR / "binary" / "base_binary_model.onnx"),
             providers=["CPUExecutionProvider"],
@@ -158,14 +167,15 @@ class InferencePipeline:
         self._calibrated_binary = joblib.load(
             MODELS_DIR / "binary" / "calibrated_binary_model.pkl"
         )
+        
         self.mean = self._scaler.mean_
         self.scale = self._scaler.scale_
         _, self._encoder = load_multiclass_model(self._multiclass_model_dir)
         self._policy = PolicyMapper(self._policy_config_path)
+        
         self._loaded = True
-
         logger.info(
-            "InferencePipeline ready — %d features  threshold=%.2f  (%.2fs)",
+            "InferencePipeline ready — %d features threshold=%.2f (%.2fs)",
             len(self._features),
             self._threshold,
             time.time() - t0,
@@ -218,15 +228,18 @@ class InferencePipeline:
         Parameters
         ----------
         df : pd.DataFrame
-            Each row is one network flow.  The DataFrame must contain
-            (at minimum) the columns in the selected feature list.
-            Extra columns are silently ignored.
+            Each row is one network flow.  Must contain (at minimum) the
+            columns in the selected feature list.  Extra columns are ignored.
 
         Returns
         -------
-        list[PolicyDecision]
-            One decision per input row, in input order.
+        list[dict]
+            One decision dict per input row, in input order.
         """
+        # Lazy load — safe to call predict() without explicit load()
+        if not self._loaded:
+            self.load()
+
         if df.empty:
             return []
 

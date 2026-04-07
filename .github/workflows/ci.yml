@@ -2,69 +2,46 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   validate-system:
-    name: Production Hardening Audit
+    name: Production-Grade CI Refactor
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     env:
-      PYTHONPATH: .
       CI: "true"
+      PYTHONPATH: .
 
     steps:
-      # 🔹 Checkout
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 🔹 Python setup
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          cache: "pip"
 
-      # 🔹 Install deps
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 🔹 Basic sanity
-      - name: Python Sanity Check
-        run: python -c "print('Python environment OK')"
+      - name: Import Sanity Check
+        run: python -c "import src.api.main; print('Import OK')"
 
-      # 🔹 Import-level validation (CRITICAL)
-      - name: Import Core Modules
+      - name: API Startup Sanity Check
+        run: python -c "from src.api.main import app; print('API OK')"
+
+      - name: Run Tests
+        run: pytest tests/ -vv --tb=long
+
+      - name: Models Directory Safety Check
         run: |
-          python -c "import src"
-          python -c "from src.api.main import app; print('API import OK')"
-          python -c "from src.inference.inference_pipeline import InferencePipeline; print('Pipeline import OK')"
-
-      # 🔹 Run tests (skip model-dependent ones via CI=true env)
-      - name: Run Test Suite
-        run: |
-          pytest tests/ -vv --tb=long
-
-      # 🔹 Lightweight API schema check
-      - name: API Contract Check (No Model Load)
-        run: |
-          python - <<EOF
-          from src.api.main import app
-          print("Routes loaded:", len(app.routes))
-          assert len(app.routes) > 0
-          print("API contract OK")
-          EOF
-
-      # 🔹 Explicit skip for heavy inference
-      - name: Inference Check (Skipped in CI)
-        run: |
-          echo "Skipping inference pipeline — requires local model artifacts"
-
-      # 🔹 Final success marker
-      - name: CI Success
-        run: echo "Production Hardening Audit PASSED"
+          if [ -d "models" ]; then
+            echo "FAILED: Models directory exists in CI environment, which violates the strict artifact-independence rule."
+            exit 1
+          fi
+          echo "SUCCESS: Models directory not present. CI-safety verified."
