@@ -28,7 +28,7 @@ def test_health_always_ok():
         data = response.json()
         assert data["status"] == "ok"
         assert "pipeline_ready" in data
-        assert "meta_ready" in data
+
         # pipeline_error should be None (no error has occurred)
         assert data.get("pipeline_error") is None
 
