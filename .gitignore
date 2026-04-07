@@ -20,7 +20,7 @@ data/processed/*
 
 # Models (keep structure only)
 models/*
-!models/.gitkeep
+!models/.gitignore
 
 # Artifacts (keep structure only)
 artifacts/*
